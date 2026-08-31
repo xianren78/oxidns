@@ -32,6 +32,7 @@ import {
   formatLogTimestamp,
 } from "@/lib/log-display";
 import { streamLogs, type LogEntry } from "@/lib/oxidns-api";
+import { useAuthStore } from "@/lib/auth-store";
 
 const LEVEL_COLORS: Record<
   string,
@@ -152,6 +153,7 @@ function LogLine({
 }
 
 export function LogViewer() {
+  const connectionEpoch = useAuthStore((state) => state.connectionEpoch);
   const { t } = useI18n();
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [levelFilter, setLevelFilter] = useState<string>("all");
@@ -241,7 +243,7 @@ export function LogViewer() {
       pendingRef.current = [];
       setBacklog(0);
     };
-  }, [levelFilter]);
+  }, [levelFilter, connectionEpoch]);
 
   const togglePause = useCallback(() => {
     setPaused((prev) => {
