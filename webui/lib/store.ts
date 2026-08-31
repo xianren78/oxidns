@@ -64,7 +64,7 @@ import {
   type ConfigSnapshot,
 } from "./config-history";
 import { WEBUI, tClient } from "./i18n";
-import { useAuthStore } from "./auth-store";
+import { activeEndpoint, useAuthStore } from "./auth-store";
 import {
   isReservedPluginTag,
   pluginTagValidationMessageKey,
@@ -219,7 +219,8 @@ let configValidationGeneration = 0;
 let activeBackendKey: string | null = null;
 
 function currentBackendKey(): string {
-  const { connectionEpoch, serverConfig } = useAuthStore.getState();
+  const { connectionEpoch } = useAuthStore.getState();
+  const serverConfig = activeEndpoint();
   return `${connectionEpoch}\0${serverConfig.url.trim()}`;
 }
 
