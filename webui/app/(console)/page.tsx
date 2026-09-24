@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { AppHeader } from "@/components/shell/app-header";
 import { SystemMetrics } from "@/components/dashboard/system-metrics";
+import { EndpointOverview } from "@/components/dashboard/endpoint-overview";
 import { SortablePluginGrid } from "@/components/plugins/sortable-plugin-grid";
 import { useAppStore } from "@/lib/store";
 import type { PluginInstance } from "@/lib/types";
@@ -99,6 +100,7 @@ export default function DashboardPage() {
       <AppHeader title={t(WEBUI.shell.dashboard)} />
       <main className="oxidns-dialog-scrollbar min-h-0 flex-1 overflow-auto p-6">
         <div className="space-y-8">
+          <EndpointOverview />
           <section>
             <h2 className="text-lg font-semibold mb-4">
               {t(WEBUI.plugins.systemOverview)}

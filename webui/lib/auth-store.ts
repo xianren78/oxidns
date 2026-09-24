@@ -11,8 +11,18 @@ export interface ServerConfig {
   password: string;
 }
 
+export type EndpointStatus = "unknown" | "checking" | "online" | "offline";
+
+export interface ManagedEndpoint extends ServerConfig {
+  id: string;
+  name: string;
+  status: EndpointStatus;
+}
+
 export interface AuthState {
   serverConfig: ServerConfig;
+  endpoints: ManagedEndpoint[];
+  activeEndpointId: string;
   isAuthenticated: boolean;
   isConnected: boolean;
   isConnecting: boolean;
@@ -25,6 +35,11 @@ export interface AuthState {
   rememberLogin: boolean;
 
   setServerConfig: (config: ServerConfig) => void;
+  addEndpoint: (name: string, config: ServerConfig) => string;
+  updateEndpoint: (id: string, name: string, config: ServerConfig) => void;
+  removeEndpoint: (id: string) => void;
+  selectEndpoint: (id: string) => void;
+  probeEndpoints: () => Promise<void>;
   connect: (config?: ServerConfig) => Promise<boolean>;
   attemptAutoConnect: () => Promise<void>;
   markHydrated: () => void;
@@ -41,6 +56,18 @@ export const useAuthStore = create<AuthState>()(
         username: "",
         password: "",
       },
+      endpoints: [
+        {
+          id: "default",
+          name: "OxiDNS",
+          url: "/api",
+          requiresAuth: false,
+          username: "",
+          password: "",
+          status: "unknown",
+        },
+      ],
+      activeEndpointId: "default",
       isAuthenticated: false,
       isConnected: false,
       isConnecting: false,
@@ -54,6 +81,11 @@ export const useAuthStore = create<AuthState>()(
       setServerConfig: (config) =>
         set((state) => ({
           serverConfig: config,
+          endpoints: state.endpoints.map((endpoint) =>
+            endpoint.id === state.activeEndpointId
+              ? { ...endpoint, ...config }
+              : endpoint,
+          ),
           ...(isSameServerConfig(state.serverConfig, config)
             ? {}
             : {
@@ -63,6 +95,83 @@ export const useAuthStore = create<AuthState>()(
                 needsCredentials: false,
               }),
         })),
+
+      addEndpoint: (name, config) => {
+        const id = crypto.randomUUID();
+        set((state) => ({
+          endpoints: [
+            ...state.endpoints,
+            { id, name: name.trim(), ...config, status: "unknown" },
+          ],
+        }));
+        return id;
+      },
+
+      updateEndpoint: (id, name, config) =>
+        set((state) => {
+          const isActive = id === state.activeEndpointId;
+          return {
+            endpoints: state.endpoints.map((endpoint) =>
+              endpoint.id === id
+                ? { ...endpoint, name: name.trim(), ...config }
+                : endpoint,
+            ),
+            ...(isActive ? { serverConfig: config } : {}),
+          };
+        }),
+
+      removeEndpoint: (id) =>
+        set((state) => {
+          if (state.endpoints.length === 1) return state;
+          const endpoints = state.endpoints.filter(
+            (endpoint) => endpoint.id !== id,
+          );
+          if (id !== state.activeEndpointId) return { endpoints };
+          const next = endpoints[0];
+          return {
+            endpoints,
+            activeEndpointId: next.id,
+            serverConfig: endpointConfig(next),
+            isAuthenticated: false,
+            isConnected: false,
+            connectionError: null,
+            needsCredentials: false,
+          };
+        }),
+
+      selectEndpoint: (id) =>
+        set((state) => {
+          const endpoint = state.endpoints.find((item) => item.id === id);
+          if (!endpoint || id === state.activeEndpointId) return state;
+          return {
+            activeEndpointId: id,
+            serverConfig: endpointConfig(endpoint),
+            isAuthenticated: false,
+            isConnected: false,
+            connectionError: null,
+            needsCredentials: false,
+          };
+        }),
+
+      probeEndpoints: async () => {
+        const endpoints = get().endpoints;
+        set((state) => ({
+          endpoints: state.endpoints.map((endpoint) => ({
+            ...endpoint,
+            status: "checking",
+          })),
+        }));
+        await Promise.all(
+          endpoints.map(async (endpoint) => {
+            const status = await probeEndpoint(endpoint);
+            set((state) => ({
+              endpoints: state.endpoints.map((current) =>
+                current.id === endpoint.id ? { ...current, status } : current,
+              ),
+            }));
+          }),
+        );
+      },
 
       setRememberLogin: (remember) => set({ rememberLogin: remember }),
 
@@ -110,7 +219,7 @@ export const useAuthStore = create<AuthState>()(
             headers,
           });
           if (response.status === 401) {
-            set({
+            set((state) => ({
               isConnected: false,
               isAuthenticated: false,
               isConnecting: false,
@@ -122,7 +231,17 @@ export const useAuthStore = create<AuthState>()(
                   ? tClient(WEBUI.storeErrors.invalidCredentials)
                   : null,
               serverConfig: { ...serverConfig, requiresAuth: true },
-            });
+              endpoints: state.endpoints.map((endpoint) =>
+                endpoint.id === state.activeEndpointId
+                  ? {
+                      ...endpoint,
+                      ...serverConfig,
+                      requiresAuth: true,
+                      status: "online",
+                    }
+                  : endpoint,
+              ),
+            }));
             return false;
           }
           if (!response.ok) {
@@ -134,6 +253,11 @@ export const useAuthStore = create<AuthState>()(
           }
           set((state) => ({
             serverConfig,
+            endpoints: state.endpoints.map((endpoint) =>
+              endpoint.id === state.activeEndpointId
+                ? { ...endpoint, ...serverConfig, status: "online" }
+                : endpoint,
+            ),
             isConnected: true,
             isAuthenticated: true,
             isConnecting: false,
@@ -142,16 +266,21 @@ export const useAuthStore = create<AuthState>()(
           }));
           return true;
         } catch (error) {
-          set({
+          set((state) => ({
             isConnected: false,
             isAuthenticated: false,
             isConnecting: false,
             needsCredentials: false,
+            endpoints: state.endpoints.map((endpoint) =>
+              endpoint.id === state.activeEndpointId
+                ? { ...endpoint, status: "offline" }
+                : endpoint,
+            ),
             connectionError:
               error instanceof Error
                 ? error.message
                 : tClient(WEBUI.storeErrors.connectionFailed),
-          });
+          }));
           return false;
         }
       },
@@ -163,7 +292,15 @@ export const useAuthStore = create<AuthState>()(
         await get().connect();
       },
 
-      markHydrated: () => set({ isHydrated: true }),
+      markHydrated: () =>
+        set((state) => ({
+          isHydrated: true,
+          endpoints: state.endpoints.map((endpoint) =>
+            endpoint.id === state.activeEndpointId
+              ? { ...endpoint, ...state.serverConfig, status: "unknown" }
+              : { ...endpoint, status: "unknown" },
+          ),
+        })),
     }),
     {
       name: "oxidns-auth",
@@ -173,6 +310,12 @@ export const useAuthStore = create<AuthState>()(
       // visit forces the user to re-enter it (username is kept for pre-fill).
       partialize: (state) => ({
         rememberLogin: state.rememberLogin,
+        activeEndpointId: state.activeEndpointId,
+        endpoints: state.endpoints.map((endpoint) => ({
+          ...endpoint,
+          status: "unknown" as const,
+          ...(state.rememberLogin ? {} : { password: "" }),
+        })),
         serverConfig: state.rememberLogin
           ? state.serverConfig
           : { ...state.serverConfig, password: "" },
@@ -191,4 +334,31 @@ function isSameServerConfig(left: ServerConfig, right: ServerConfig) {
     left.username === right.username &&
     left.password === right.password
   );
+}
+
+function endpointConfig(endpoint: ManagedEndpoint): ServerConfig {
+  return {
+    url: endpoint.url,
+    requiresAuth: endpoint.requiresAuth,
+    username: endpoint.username,
+    password: endpoint.password,
+  };
+}
+
+async function probeEndpoint(
+  endpoint: ManagedEndpoint,
+): Promise<EndpointStatus> {
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (endpoint.requiresAuth && endpoint.username && endpoint.password) {
+    headers.Authorization = `Basic ${btoa(`${endpoint.username}:${endpoint.password}`)}`;
+  }
+  try {
+    const response = await fetch(
+      `${endpoint.url.trim().replace(/\/$/, "")}/health`,
+      { method: "GET", headers },
+    );
+    return response.ok || response.status === 401 ? "online" : "offline";
+  } catch {
+    return "offline";
+  }
 }

@@ -333,7 +333,13 @@ function OutboundRuntimeMetricsPanel({
 export default function SettingsPage() {
   const { t, formatDateTime } = useI18n();
   const serverConfig = useAuthStore((s) => s.serverConfig);
+  const endpoints = useAuthStore((s) => s.endpoints);
+  const activeEndpointId = useAuthStore((s) => s.activeEndpointId);
   const setServerConfig = useAuthStore((s) => s.setServerConfig);
+  const addEndpoint = useAuthStore((s) => s.addEndpoint);
+  const updateEndpoint = useAuthStore((s) => s.updateEndpoint);
+  const removeEndpoint = useAuthStore((s) => s.removeEndpoint);
+  const selectEndpoint = useAuthStore((s) => s.selectEndpoint);
   const connect = useAuthStore((s) => s.connect);
   const isConnected = useAuthStore((s) => s.isConnected);
   const isConnecting = useAuthStore((s) => s.isConnecting);
@@ -373,6 +379,9 @@ export default function SettingsPage() {
   const restartApp = useAppStore((s) => s.restartApp);
 
   const [backendUrl, setBackendUrl] = useState(serverConfig.url);
+  const [endpointName, setEndpointName] = useState(
+    endpoints.find((endpoint) => endpoint.id === activeEndpointId)?.name ?? "",
+  );
   const [workerThreads, setWorkerThreads] = useState("");
   const [apiListen, setApiListen] = useState("");
   const [apiSslEnabled, setApiSslEnabled] = useState(false);
@@ -403,6 +412,16 @@ export default function SettingsPage() {
     OutboundProfileForm[]
   >([]);
   const [settingsError, setSettingsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const endpoint = endpoints.find((item) => item.id === activeEndpointId);
+    if (!endpoint) return;
+    const timer = window.setTimeout(() => {
+      setBackendUrl(endpoint.url);
+      setEndpointName(endpoint.name);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [activeEndpointId, endpoints]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -465,7 +484,19 @@ export default function SettingsPage() {
       : (system?.version ?? health?.version ?? "-");
 
   const handleSaveConnection = () => {
-    setServerConfig({ ...serverConfig, url: backendUrl.trim() });
+    const config = { ...serverConfig, url: backendUrl.trim() };
+    updateEndpoint(activeEndpointId, endpointName, config);
+    setServerConfig(config);
+  };
+
+  const handleAddEndpoint = () => {
+    const id = addEndpoint(t(WEBUI.endpoints.name), {
+      url: "/api",
+      requiresAuth: false,
+      username: "",
+      password: "",
+    });
+    selectEndpoint(id);
   };
 
   const runtimeVersionForCheck = system?.build
@@ -829,6 +860,46 @@ export default function SettingsPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="grid gap-2 sm:grid-cols-2">
+                {endpoints.map((endpoint) => (
+                  <div
+                    key={endpoint.id}
+                    className={`flex items-center gap-2 rounded-lg border p-2 ${endpoint.id === activeEndpointId ? "border-primary/50 bg-primary/5" : ""}`}
+                  >
+                    <Button
+                      variant="ghost"
+                      className="min-w-0 flex-1 justify-start"
+                      onClick={() => selectEndpoint(endpoint.id)}
+                    >
+                      <span className="truncate">{endpoint.name}</span>
+                    </Button>
+                    <Badge variant="outline">
+                      {t(WEBUI.endpoints[endpoint.status])}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      disabled={endpoints.length === 1}
+                      aria-label={t(WEBUI.endpoints.remove)}
+                      onClick={() => removeEndpoint(endpoint.id)}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <Button variant="outline" size="sm" onClick={handleAddEndpoint}>
+                <Plus />
+                {t(WEBUI.endpoints.add)}
+              </Button>
+              <Field>
+                <FieldLabel>{t(WEBUI.endpoints.name)}</FieldLabel>
+                <Input
+                  value={endpointName}
+                  onChange={(event) => setEndpointName(event.target.value)}
+                  placeholder={t(WEBUI.endpoints.namePlaceholder)}
+                />
+              </Field>
               <Field>
                 <FieldLabel>{t(WEBUI.settings.serviceUrl)}</FieldLabel>
                 <Input
