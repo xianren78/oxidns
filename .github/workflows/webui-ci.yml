@@ -6,6 +6,8 @@ on:
     branches:
       - main
       - "release/*"
+    tags:
+      - "v*"
     paths:
       - "webui/**"
       - ".github/workflows/webui-ci.yml"
@@ -58,3 +60,37 @@ jobs:
       - name: Build WebUI
         working-directory: webui
         run: pnpm build
+
+      - name: Package WebUI
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf oxidns-webui.tar.gz -C webui/out .
+
+      - name: Upload WebUI package
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: oxidns-webui
+          path: oxidns-webui.tar.gz
+          compression-level: 0
+          if-no-files-found: error
+
+  publish:
+    name: Publish WebUI package
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: webui
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download WebUI package
+        uses: actions/download-artifact@v8
+        with:
+          name: oxidns-webui
+
+      - name: Upload WebUI package to release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: oxidns-webui.tar.gz

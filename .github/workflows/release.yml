@@ -45,26 +45,11 @@ jobs:
         working-directory: webui
         run: pnpm build
 
-      - name: Package standalone WebUI
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd webui/out
-          zip -qr "../../oxidns-webui.zip" .
-
       - name: Upload WebUI artifact
         uses: actions/upload-artifact@v7
         with:
           name: webui-dist
           path: webui/out
-          if-no-files-found: error
-
-      - name: Upload standalone WebUI release artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: oxidns-webui.zip
-          path: oxidns-webui.zip
-          compression-level: 0
           if-no-files-found: error
 
   release:
