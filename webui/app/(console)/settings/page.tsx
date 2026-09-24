@@ -393,6 +393,10 @@ export default function SettingsPage() {
   const [apiCorsOrigins, setApiCorsOrigins] = useState("");
   const [apiWebuiEnabled, setApiWebuiEnabled] = useState(false);
   const [apiWebuiRoot, setApiWebuiRoot] = useState("");
+
+  // The endpoint switcher lives in the shared shell, so this page can remain
+  // mounted while the active endpoint changes.
+  useEffect(() => setBackendUrl(serverConfig.url), [serverConfig.url]);
   const [apiWebuiIndex, setApiWebuiIndex] = useState("");
   const [logLevel, setLogLevel] = useState("info");
   const [logFile, setLogFile] = useState("");
