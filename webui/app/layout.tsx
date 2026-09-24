@@ -1,16 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { zhCNWebui } from "@/lib/i18n/locales/zh-CN/webui";
 import { I18nProvider } from "@/lib/i18n/provider";
 import { ToastProvider } from "@/components/ui/toast";
-
-const fontSans = Inter({ subsets: ["latin"], variable: "--font-sans" });
-const fontMono = JetBrains_Mono({
-  subsets: ["latin"],
-  variable: "--font-mono",
-});
 
 export const metadata: Metadata = {
   title: zhCNWebui.metadata.title,
@@ -47,7 +40,6 @@ export default function RootLayout({
     <html
       lang="zh-CN"
       suppressHydrationWarning
-      className={`${fontSans.variable} ${fontMono.variable}`}
     >
       <body className="antialiased bg-background">
         <ThemeProvider

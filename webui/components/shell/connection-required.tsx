@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { useAppStore } from "@/lib/store";
-import { useAuthStore } from "@/lib/auth-store";
+import { activeEndpoint, useAuthStore } from "@/lib/auth-store";
 import {
   Card,
   CardContent,
@@ -27,7 +27,10 @@ import { useI18n } from "@/lib/i18n/provider";
 
 export function LoginRequired() {
   const { t } = useI18n();
-  const serverConfig = useAuthStore((s) => s.serverConfig);
+  const endpoint =
+    useAuthStore((s) =>
+      s.endpoints.find((item) => item.id === s.activeEndpointId),
+    ) ?? activeEndpoint();
   const connect = useAuthStore((s) => s.connect);
   const isConnecting = useAuthStore((s) => s.isConnecting);
   const connectionError = useAuthStore((s) => s.connectionError);
@@ -36,16 +39,16 @@ export function LoginRequired() {
   const loadConfig = useAppStore((s) => s.loadConfig);
   const setEditorMode = useAppStore((s) => s.setEditorMode);
 
-  const [username, setUsername] = useState(serverConfig.username);
+  const [username, setUsername] = useState(endpoint.username);
   const [password, setPassword] = useState("");
 
   const hadCredentials =
-    serverConfig.requiresAuth && serverConfig.username && serverConfig.password;
+    endpoint.requiresAuth && endpoint.username && endpoint.password;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const ok = await connect({
-      ...serverConfig,
+      ...endpoint,
       requiresAuth: true,
       username,
       password,
@@ -69,7 +72,7 @@ export function LoginRequired() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground font-mono truncate">
-            {serverConfig.url || "/api"}
+            {endpoint.url || "/api"}
           </div>
           <form onSubmit={handleSubmit} className="space-y-4">
             <Field>
