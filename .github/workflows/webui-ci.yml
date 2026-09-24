@@ -18,7 +18,11 @@ on:
       - ".github/workflows/webui-ci.yml"
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: webui-release-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   webui:
@@ -58,3 +62,34 @@ jobs:
       - name: Build WebUI
         working-directory: webui
         run: pnpm build
+
+      - name: Package WebUI
+        if: github.event_name != 'pull_request'
+        working-directory: webui/out
+        run: zip -9 -r "${{ github.workspace }}/oxidns-webui.zip" .
+
+      - name: Move webui tag to this commit
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git tag --force webui "$GITHUB_SHA"
+          git push --force origin refs/tags/webui
+
+      - name: Publish WebUI release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view webui >/dev/null 2>&1; then
+            gh release upload webui oxidns-webui.zip --clobber
+            gh release edit webui \
+              --title "OxiDNS WebUI" \
+              --notes "WebUI build from commit ${GITHUB_SHA}." \
+              --latest
+          else
+            gh release create webui oxidns-webui.zip \
+              --title "OxiDNS WebUI" \
+              --notes "WebUI build from commit ${GITHUB_SHA}." \
+              --latest
+          fi
