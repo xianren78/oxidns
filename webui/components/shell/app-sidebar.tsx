@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { WEBUI } from "@/lib/i18n";
 import { useI18n } from "@/lib/i18n/provider";
+import { EndpointManager } from "@/components/endpoints/endpoint-manager";
 
 const navItems = [
   {
@@ -123,6 +124,9 @@ export function AppSidebar() {
 
       <SidebarFooter className="border-t border-sidebar-border">
         <SidebarMenu>
+          <SidebarMenuItem>
+            <EndpointManager />
+          </SidebarMenuItem>
           {isConnected && serverConfig.requiresAuth && (
             <SidebarMenuItem>
               <div className="flex items-center justify-between gap-1 px-2 py-1">

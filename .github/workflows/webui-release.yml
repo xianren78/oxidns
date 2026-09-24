@@ -1,0 +1,84 @@
+name: WebUI Release
+
+on:
+  push:
+    tags:
+      - "webui-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Standalone WebUI release tag (for example webui-v1.6.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish standalone WebUI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolve release tag
+        id: release
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_TAG: ${{ github.ref_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG="$PUSH_TAG"
+          fi
+          case "$TAG" in
+            webui-v*) ;;
+            *) echo "tag must start with webui-v" >&2; exit 1 ;;
+          esac
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: webui/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: webui
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate WebUI
+        working-directory: webui
+        run: |
+          pnpm typecheck
+          pnpm lint
+          pnpm test
+
+      - name: Build static export
+        working-directory: webui
+        run: pnpm build
+
+      - name: Package standalone assets
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          mkdir -p dist
+          tar -czf "dist/oxidns-webui-${TAG}.tar.gz" -C webui/out .
+          (cd webui/out && zip -qr "../../dist/oxidns-webui-${TAG}.zip" .)
+          (cd dist && sha256sum oxidns-webui-* > SHA256SUMS)
+
+      - name: Publish standalone WebUI release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          gh release create "$TAG" dist/* \
+            --target "$GITHUB_SHA" \
+            --title "OxiDNS WebUI ${TAG#webui-v}" \
+            --generate-notes

@@ -333,6 +333,7 @@ function OutboundRuntimeMetricsPanel({
 export default function SettingsPage() {
   const { t, formatDateTime } = useI18n();
   const serverConfig = useAuthStore((s) => s.serverConfig);
+  const activeEndpointId = useAuthStore((s) => s.activeEndpointId);
   const setServerConfig = useAuthStore((s) => s.setServerConfig);
   const connect = useAuthStore((s) => s.connect);
   const isConnected = useAuthStore((s) => s.isConnected);
@@ -372,7 +373,19 @@ export default function SettingsPage() {
   const isRestarting = useAppStore((s) => s.isRestarting);
   const restartApp = useAppStore((s) => s.restartApp);
 
-  const [backendUrl, setBackendUrl] = useState(serverConfig.url);
+  const [backendUrlDrafts, setBackendUrlDrafts] = useState<
+    Record<string, { source: string; value: string }>
+  >({});
+  const backendUrlDraft = backendUrlDrafts[activeEndpointId];
+  const backendUrl =
+    backendUrlDraft?.source === serverConfig.url
+      ? backendUrlDraft.value
+      : serverConfig.url;
+  const setBackendUrl = (value: string) =>
+    setBackendUrlDrafts((drafts) => ({
+      ...drafts,
+      [activeEndpointId]: { source: serverConfig.url, value },
+    }));
   const [workerThreads, setWorkerThreads] = useState("");
   const [apiListen, setApiListen] = useState("");
   const [apiSslEnabled, setApiSslEnabled] = useState(false);
@@ -393,6 +406,10 @@ export default function SettingsPage() {
   const [apiCorsOrigins, setApiCorsOrigins] = useState("");
   const [apiWebuiEnabled, setApiWebuiEnabled] = useState(false);
   const [apiWebuiRoot, setApiWebuiRoot] = useState("");
+
+  // The endpoint switcher lives in the shared shell, so this page can remain
+  // mounted while the active endpoint changes.
+  useEffect(() => setBackendUrl(serverConfig.url), [serverConfig.url]);
   const [apiWebuiIndex, setApiWebuiIndex] = useState("");
   const [logLevel, setLogLevel] = useState("info");
   const [logFile, setLogFile] = useState("");
