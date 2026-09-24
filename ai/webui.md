@@ -12,10 +12,12 @@ Paths in this guide are relative to `webui/` unless stated otherwise.
 - `lib/plugin-definitions/docs.ts` holds fallback field-level documentation keyed by plugin kind; it is merged automatically via `withFieldDocs()`. Localized user-facing docs live under `lib/i18n/locales/*/docs.ts`.
 - `lib/i18n/` contains locale state, translation keys, localized WebUI copy, localized plugin definitions, and localized plugin field docs. Keep it aligned whenever adding user-facing UI text or plugin metadata.
 - `lib/store.ts` contains the current client state model with Zustand. Backend API wiring should replace mock actions behind this store shape where possible instead of scattering fetch logic through views.
-- `package.json`, the lockfile, and the repository-root
-  `.github/workflows/webui-ci.yml` define the supported package manager, scripts,
-  build mode, and CI checks. Invoke scripts from the manifest instead of copying
-  their command bodies into this guide.
+- `lib/auth-store.ts` owns the persisted multi-endpoint model (`endpoints` and `activeEndpointId`). API helpers resolve the active endpoint at request time, while the connection epoch invalidates polling and streaming work when operators switch instances.
+- `pnpm dev` runs the WebUI development server with Turbopack.
+- `pnpm build` builds the WebUI for production.
+- `pnpm typecheck` runs TypeScript validation.
+- `pnpm lint` runs ESLint for the WebUI.
+- `pnpm format` formats TypeScript and TSX with Prettier and Tailwind class ordering.
 
 ## Coding Style
 
@@ -42,9 +44,8 @@ Paths in this guide are relative to `webui/` unless stated otherwise.
 
 ## Architecture & Extension Principles
 
-- Keep console-shell ownership centralized in `app/(console)/layout.tsx` and the
-  shell components it imports; derive the current component flow from those
-  imports instead of preserving a copied chain here.
+- Preserve the console shell flow: `app/(console)/layout.tsx -> AppSidebar/AppHeader -> page content -> PluginDetailSheet`, with `ConfigEditorView` taking over the main area when `editorMode` is enabled.
+- Keep endpoint selection in the console shell. Switching endpoints must remain client-side, abort endpoint-scoped streams, and trigger authoritative config/runtime refreshes through the existing stores rather than duplicating backend state in pages.
 - Keep global UI state in `useAppStore` until backend integration introduces a clearer API boundary. Avoid duplicating selected plugin, drawer state, editor mode, or restart/save flags in page-local stores.
 - Treat `PluginInstance` in `lib/types.ts` as the UI model for live plugin instances. Keep its `type` aligned with OxiDNS plugin categories: `server`, `executor`, `matcher`, and `provider`.
 - **Schema registration for a new plugin kind requires one definition-file change.** Add the definition to the category file selected by the current exports under `lib/plugin-definitions/`. The following behavior auto-derives from that definition without another schema registry:

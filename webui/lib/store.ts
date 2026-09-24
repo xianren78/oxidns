@@ -67,7 +67,11 @@ import {
   type ConfigSnapshot,
 } from "./config-history";
 import { WEBUI, tClient } from "./i18n";
-import { useAuthStore } from "./auth-store";
+import { activeEndpoint, useAuthStore } from "./auth-store";
+import {
+  loadEndpointPreference,
+  saveEndpointPreference,
+} from "./endpoint-storage";
 import {
   isReservedPluginTag,
   pluginTagValidationMessageKey,
@@ -261,7 +265,8 @@ interface PendingConfigPatch {
 let pendingConfigPatch: PendingConfigPatch | null = null;
 
 function currentBackendKey(): string {
-  const { connectionEpoch, serverConfig } = useAuthStore.getState();
+  const { connectionEpoch } = useAuthStore.getState();
+  const serverConfig = activeEndpoint();
   return `${connectionEpoch}\0${serverConfig.url.trim()}`;
 }
 
@@ -1559,18 +1564,11 @@ function syncSelectedPlugin(
 const PINNED_PLUGINS_KEY = "oxidns:pinned-plugins";
 
 function loadPinnedIds(): Set<string> {
-  try {
-    const stored = localStorage.getItem(PINNED_PLUGINS_KEY);
-    return stored ? new Set(JSON.parse(stored) as string[]) : new Set();
-  } catch {
-    return new Set();
-  }
+  return new Set(loadEndpointPreference<string[]>(PINNED_PLUGINS_KEY, []));
 }
 
 function savePinnedIds(ids: Set<string>): void {
-  try {
-    localStorage.setItem(PINNED_PLUGINS_KEY, JSON.stringify([...ids]));
-  } catch {}
+  saveEndpointPreference(PINNED_PLUGINS_KEY, [...ids]);
 }
 
 function restorePinnedState(plugins: PluginInstance[]): PluginInstance[] {
