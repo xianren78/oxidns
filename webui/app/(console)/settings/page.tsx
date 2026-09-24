@@ -332,8 +332,12 @@ function OutboundRuntimeMetricsPanel({
 
 export default function SettingsPage() {
   const { t, formatDateTime } = useI18n();
-  const serverConfig = useAuthStore((s) => s.serverConfig);
-  const setServerConfig = useAuthStore((s) => s.setServerConfig);
+  const serverConfig = useAuthStore(
+    (s) => s.endpoints.find((endpoint) => endpoint.id === s.activeEndpointId)!,
+  );
+  const updateEndpoint = useAuthStore((s) => s.updateEndpoint);
+  const setServerConfig = (config: typeof serverConfig) =>
+    updateEndpoint(config.id, config);
   const connect = useAuthStore((s) => s.connect);
   const isConnected = useAuthStore((s) => s.isConnected);
   const isConnecting = useAuthStore((s) => s.isConnecting);
