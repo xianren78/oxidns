@@ -17,6 +17,7 @@ import {
   DASHBOARD_HEALTH_POLL_INTERVAL_MS,
   DASHBOARD_SYSTEM_POLL_INTERVAL_MS,
 } from "@/lib/polling-policy";
+import { EndpointOverview } from "@/components/endpoints/endpoint-overview";
 
 // Dashboard card order is a frontend-only preference: it lives in
 // localStorage and never touches the config file (unlike the plugin center,
@@ -99,6 +100,7 @@ export default function DashboardPage() {
       <AppHeader title={t(WEBUI.shell.dashboard)} />
       <main className="oxidns-dialog-scrollbar min-h-0 flex-1 overflow-auto p-6">
         <div className="space-y-8">
+          <EndpointOverview />
           <section>
             <h2 className="text-lg font-semibold mb-4">
               {t(WEBUI.plugins.systemOverview)}

@@ -261,8 +261,9 @@ interface PendingConfigPatch {
 let pendingConfigPatch: PendingConfigPatch | null = null;
 
 function currentBackendKey(): string {
-  const { connectionEpoch, serverConfig } = useAuthStore.getState();
-  return `${connectionEpoch}\0${serverConfig.url.trim()}`;
+  const { activeEndpointId, connectionEpoch, serverConfig } =
+    useAuthStore.getState();
+  return `${activeEndpointId}\0${connectionEpoch}\0${serverConfig.url.trim()}`;
 }
 
 function isCurrentBackend(backendKey: string): boolean {
