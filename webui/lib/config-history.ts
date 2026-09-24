@@ -41,13 +41,14 @@ const KEY_PREFIX = "oxidns:config-history:";
 const MAX_ENTRIES = 30;
 
 export function getScopeKey(configPath: string): string {
-  let serverUrl = "";
+  let endpoint = "";
   try {
-    serverUrl = useAuthStore.getState().serverConfig.url.trim();
+    const auth = useAuthStore.getState();
+    endpoint = auth.activeEndpointId || auth.serverConfig.url.trim();
   } catch {
-    serverUrl = "";
+    endpoint = "";
   }
-  return `${serverUrl}|${configPath}`;
+  return `${endpoint}|${configPath}`;
 }
 
 function storageKey(scope: string) {
