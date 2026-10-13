@@ -5,7 +5,7 @@
 
 "use client";
 
-import { useAuthStore } from "./auth-store";
+import { activeEndpoint, useAuthStore } from "./auth-store";
 import { WEBUI, tClient } from "./i18n";
 import type { MatcherRuntimeMode } from "./matcher-control";
 
@@ -723,7 +723,7 @@ export async function flushCache(tag: string): Promise<void> {
 }
 
 export async function fetchCacheDump(tag: string): Promise<Blob> {
-  const { serverConfig } = useAuthStore.getState();
+  const serverConfig = activeEndpoint();
   const headers: Record<string, string> = {};
   if (serverConfig.requiresAuth && serverConfig.username) {
     headers.Authorization = `Basic ${btoa(`${serverConfig.username}:${serverConfig.password}`)}`;
@@ -747,7 +747,7 @@ export async function loadCacheDump(
   tag: string,
   data: ArrayBuffer,
 ): Promise<CacheLoadDumpResponse> {
-  const { serverConfig } = useAuthStore.getState();
+  const serverConfig = activeEndpoint();
   const headers: Record<string, string> = {
     Accept: "application/json",
     "Content-Type": "application/octet-stream",
@@ -1173,7 +1173,7 @@ export async function fetchUpgradeStatus(): Promise<UpgradeStatusResponse> {
 }
 
 export function apiUrl(path: string) {
-  const baseUrl = useAuthStore.getState().serverConfig.url.trim();
+  const baseUrl = activeEndpoint().url.trim();
   return `${baseUrl.replace(/\/$/, "")}${path}`;
 }
 
@@ -1202,7 +1202,7 @@ function appendQueryRecordFilters(
 }
 
 export function apiHeaders() {
-  const { serverConfig } = useAuthStore.getState();
+  const serverConfig = activeEndpoint();
   const headers: Record<string, string> = { Accept: "application/json" };
   if (serverConfig.requiresAuth && serverConfig.username) {
     headers.Authorization = `Basic ${btoa(`${serverConfig.username}:${serverConfig.password}`)}`;
