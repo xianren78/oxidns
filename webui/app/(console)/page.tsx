@@ -12,6 +12,10 @@ import { ArrowRight } from "lucide-react";
 import { WEBUI } from "@/lib/i18n";
 import { useI18n } from "@/lib/i18n/provider";
 import { useAuthStore } from "@/lib/auth-store";
+import {
+  loadEndpointPreference,
+  saveEndpointPreference,
+} from "@/lib/endpoint-storage";
 import { useVisiblePolling } from "@/hooks/use-visible-polling";
 import {
   DASHBOARD_HEALTH_POLL_INTERVAL_MS,
@@ -24,18 +28,11 @@ import {
 const DASHBOARD_ORDER_KEY = "oxidns:dashboard-order";
 
 function loadDashboardOrder(): string[] {
-  try {
-    const stored = localStorage.getItem(DASHBOARD_ORDER_KEY);
-    return stored ? (JSON.parse(stored) as string[]) : [];
-  } catch {
-    return [];
-  }
+  return loadEndpointPreference<string[]>(DASHBOARD_ORDER_KEY, []);
 }
 
 function saveDashboardOrder(ids: string[]): void {
-  try {
-    localStorage.setItem(DASHBOARD_ORDER_KEY, JSON.stringify(ids));
-  } catch {}
+  saveEndpointPreference(DASHBOARD_ORDER_KEY, ids);
 }
 
 // Sort pinned plugins by the saved order; anything not yet ranked (newly
@@ -59,13 +56,13 @@ export default function DashboardPage() {
   const refreshSystemState = useAppStore((s) => s.refreshSystemState);
   const isConnected = useAuthStore((s) => s.isConnected);
   const connectionEpoch = useAuthStore((s) => s.connectionEpoch);
-  // Hydrate from localStorage lazily. On the server this is []; the first
-  // client render also produces an empty pinned grid (plugins load after
-  // mount), so applying a different order here cannot cause a hydration
-  // mismatch.
-  const [order, setOrder] = useState<string[]>(() =>
-    typeof window === "undefined" ? [] : loadDashboardOrder(),
-  );
+  const activeEndpointId = useAuthStore((s) => s.activeEndpointId);
+  // Read the active endpoint's order from localStorage until the user changes
+  // it during this mount. On the server this is []; the first client render
+  // also has no plugins, so it cannot cause a hydration mismatch.
+  const [orderOverrides, setOrderOverrides] = useState<
+    Record<string, string[]>
+  >({});
 
   useVisiblePolling(
     refreshSystemState,
@@ -80,17 +77,21 @@ export default function DashboardPage() {
     connectionEpoch,
   );
 
-  const pinnedPlugins = useMemo(
-    () =>
-      applyOrder(
-        plugins.filter((p) => p.pinned),
-        order,
-      ),
-    [plugins, order],
-  );
+  const pinnedPlugins = useMemo(() => {
+    const order =
+      orderOverrides[activeEndpointId] ??
+      (typeof window === "undefined" ? [] : loadDashboardOrder());
+    return applyOrder(
+      plugins.filter((p) => p.pinned),
+      order,
+    );
+  }, [activeEndpointId, orderOverrides, plugins]);
 
   const handleReorder = (ids: string[]) => {
-    setOrder(ids);
+    setOrderOverrides((current) => ({
+      ...current,
+      [activeEndpointId]: ids,
+    }));
     saveDashboardOrder(ids);
   };
 

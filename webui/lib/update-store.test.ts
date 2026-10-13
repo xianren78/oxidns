@@ -92,7 +92,11 @@ describe("update-check persistence", () => {
     ]);
     await useUpdateStore.getState().checkForUpdatesIfDue("0.9.0");
     useAuthStore.setState((state) => ({
-      serverConfig: { ...state.serverConfig, url: "https://dns.example/api" },
+      endpoints: state.endpoints.map((endpoint) =>
+        endpoint.id === state.activeEndpointId
+          ? { ...endpoint, url: "https://dns.example/api" }
+          : endpoint,
+      ),
     }));
     await useUpdateStore.getState().checkForUpdatesIfDue("0.9.0");
 

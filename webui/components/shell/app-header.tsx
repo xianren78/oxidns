@@ -24,6 +24,7 @@ import { useTheme } from "next-themes";
 import { useAppStore } from "@/lib/store";
 import { useAuthStore } from "@/lib/auth-store";
 import { useUpdateStore } from "@/lib/update-store";
+import { EndpointSwitcher } from "@/components/shell/endpoint-switcher";
 import { ConfigSyncControl } from "@/components/config/config-sync-status";
 import {
   Tooltip,
@@ -99,6 +100,7 @@ export function AppHeader({ title, breadcrumbs = [] }: AppHeaderProps) {
       )}
 
       <div className="ml-auto flex items-center gap-2">
+        {showNavigation && <EndpointSwitcher />}
         <ConfigSyncControl />
         {showUpgradeNotice && (
           <Tooltip>
