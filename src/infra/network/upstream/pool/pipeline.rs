@@ -13,9 +13,10 @@ use tracing::{debug, warn};
 
 use crate::infra::clock::AppClock;
 use crate::infra::error::Result;
+use crate::infra::network::upstream::config::ConnectionInfo;
 use crate::infra::network::upstream::pool::{
     Connection, ConnectionBuilder, ConnectionPool, DeadlineOutcome, ManagedMaintenanceTask,
-    QueryDeadline, QueryTimeoutPolicy, start_maintenance,
+    PoolSize, QueryDeadline, QueryTimeoutPolicy, start_maintenance,
 };
 use crate::infra::task as task_center;
 use crate::proto::Message;
@@ -28,6 +29,7 @@ const SLOT_CLOSED: u8 = 2;
 
 #[derive(Debug)]
 pub struct PipelinePool<C: Connection> {
+    connection_info: Arc<ConnectionInfo>,
     /// Round-robin index for load balancing across slots.
     index: AtomicUsize,
     /// List of connection slots (lock-free with ArcSwap).
@@ -53,7 +55,7 @@ pub struct PipelinePool<C: Connection> {
     /// Notify waiters when a slot is released, inserted, retired, or closed.
     release_notified: Notify,
     /// Background maintenance task registered in task center.
-    maintenance_task_id: Mutex<Option<u64>>,
+    maintenance_task_handle: Mutex<Option<task_center::ManagedTaskHandle>>,
 }
 
 #[async_trait]
@@ -147,9 +149,13 @@ impl<C: Connection> ConnectionPool<C> for PipelinePool<C> {
 
         if !close_after_swap.is_empty() {
             debug!(
-                "Pipeline pool maintenance: removed {} slots, {} active",
-                close_after_swap.len(),
-                new_len
+                upstream_tag = %self.connection_info.tag.as_deref().unwrap_or("<untagged>"),
+                upstream_host = %self.connection_info.server_name,
+                target_ip = ?self.connection_info.remote_ip,
+                upstream_port = self.connection_info.port,
+                removed_slots = close_after_swap.len(),
+                active_slots = new_len,
+                "Pipeline pool maintenance removed connections"
             );
             self.release_notified.notify_waiters();
         }
@@ -167,15 +173,29 @@ impl<C: Connection> ConnectionPool<C> for PipelinePool<C> {
 
 impl<C: Connection> PipelinePool<C> {
     pub fn new(
-        min_size: usize,
-        max_size: usize,
+        connection_info: Arc<ConnectionInfo>,
+        size: PoolSize,
         max_load: u16,
         idle_time: Duration,
         connection_builder: Box<dyn ConnectionBuilder<C>>,
         timeout_policy: QueryTimeoutPolicy,
         connect_timeout: Duration,
     ) -> Arc<PipelinePool<C>> {
+        let PoolSize {
+            min: min_size,
+            max: max_size,
+        } = size;
+        debug!(
+            upstream_tag = %connection_info.tag.as_deref().unwrap_or("<untagged>"),
+            upstream_host = %connection_info.server_name,
+            target_ip = ?connection_info.remote_ip,
+            upstream_port = connection_info.port,
+            min_size,
+            max_size,
+            "Creating PipelinePool"
+        );
         let pool = Arc::new(Self {
+            connection_info,
             index: AtomicUsize::new(0),
             slots: ArcSwap::from_pointee(Vec::new()),
             reserved_slots: AtomicUsize::new(0),
@@ -188,7 +208,7 @@ impl<C: Connection> PipelinePool<C> {
             connect_timeout,
             next_id: AtomicU16::new(1),
             release_notified: Notify::new(),
-            maintenance_task_id: Mutex::new(None),
+            maintenance_task_handle: Mutex::new(None),
         });
         start_maintenance(&pool);
         if min_size > 0 {
@@ -318,7 +338,11 @@ impl<C: Connection> PipelinePool<C> {
     ) -> Result<Option<Arc<PipelineSlot<C>>>> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         match deadline
-            .run(self.connection_builder.create_connection(id, deadline))
+            .run(self.connection_builder.create_connection(
+                id,
+                deadline,
+                self.connection_info.clone(),
+            ))
             .await
         {
             DeadlineOutcome::Completed(Ok(conn)) => {
@@ -613,8 +637,8 @@ impl<C: Connection> Drop for SlotReservation<'_, C> {
 }
 
 impl<C: Connection> ManagedMaintenanceTask for PipelinePool<C> {
-    fn maintenance_task_id(&self) -> &Mutex<Option<u64>> {
-        &self.maintenance_task_id
+    fn maintenance_task_handle(&self) -> &Mutex<Option<task_center::ManagedTaskHandle>> {
+        &self.maintenance_task_handle
     }
 
     fn maintenance_task_name(&self) -> String {
@@ -624,13 +648,13 @@ impl<C: Connection> ManagedMaintenanceTask for PipelinePool<C> {
 
 impl<C: Connection> Drop for PipelinePool<C> {
     fn drop(&mut self) {
-        let task_id = self
-            .maintenance_task_id
+        let task_handle = self
+            .maintenance_task_handle
             .lock()
             .ok()
             .and_then(|mut guard| guard.take());
-        if let Some(task_id) = task_id {
-            task_center::stop_task_detached(task_id);
+        if let Some(handle) = task_handle {
+            handle.stop_detached();
         }
     }
 }
@@ -724,6 +748,7 @@ mod tests {
             &self,
             _conn_id: u16,
             _deadline: QueryDeadline,
+            _connection_info: Arc<ConnectionInfo>,
         ) -> Result<Arc<MockConnection>> {
             self.planned
                 .lock()
@@ -747,6 +772,7 @@ mod tests {
             .map(|conn| Arc::new(PipelineSlot::new(conn)))
             .collect();
         PipelinePool {
+            connection_info: Arc::new(ConnectionInfo::with_addr("udp://127.0.0.1:53").unwrap()),
             index: AtomicUsize::new(0),
             slots: ArcSwap::from_pointee(slots),
             reserved_slots: AtomicUsize::new(0),
@@ -759,7 +785,7 @@ mod tests {
             connect_timeout: Duration::from_secs(5),
             next_id: AtomicU16::new(1),
             release_notified: Notify::new(),
-            maintenance_task_id: Mutex::new(None),
+            maintenance_task_handle: Mutex::new(None),
         }
     }
 

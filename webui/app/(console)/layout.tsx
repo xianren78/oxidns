@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Sven Shi
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -8,6 +13,7 @@ import { PluginDetailSheet } from "@/components/plugins/plugin-detail-sheet";
 import { ConfigEditorView } from "@/components/config/config-editor-view";
 import { OfflineConfigImport } from "@/components/config/offline-config-import";
 import { ConfigHistorySheet } from "@/components/config/config-history-sheet";
+import { ConfigPatchConfirmationDialog } from "@/components/config/config-patch-confirmation-dialog";
 import { useAppStore } from "@/lib/store";
 import { useAuthStore } from "@/lib/auth-store";
 import { useUpdateStore } from "@/lib/update-store";
@@ -211,6 +217,7 @@ export default function ConsoleLayout({
         </SidebarInset>
         <PluginDetailSheet />
         <ConfigHistorySheet open={historyOpen} onOpenChange={setHistoryOpen} />
+        <ConfigPatchConfirmationDialog />
         <RestartingOverlay />
         <UpgradeOverlay />
       </SidebarProvider>

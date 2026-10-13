@@ -3,10 +3,13 @@ title: External and System Integrations
 ---
 
 import Admonition from "@theme/Admonition";
+import PluginAvailability from "@site/src/components/PluginAvailability";
 
 These executors project DNS context into HTTP, scripts, Linux sets, or RouterOS. Isolate side-effect failures from the primary resolution path.
 
 ## `http_request`
+
+<PluginAvailability from="standard" />
 
 ### Purpose
 
@@ -143,7 +146,7 @@ Sends callback requests to external `http/https` services. It can trigger before
 - Source fields: `client_ip`, `client_port`, `server_name`, `url_path`
 - Runtime fields: `marks`, `has_resp`
 - Response fields: `rcode`, `rcode_name`, `resp_ip`
-- Cron metadata: `cron_plugin_tag`, `cron_job_name`, `cron_trigger_kind`, `cron_scheduled_at_unix_ms`
+- Cron metadata: `cron_plugin_tag`, `cron_job_name`, `cron_trigger_kind` (`schedule`, `interval`, or `manual`), `cron_scheduled_at_unix_ms`
 
 ### Behavior
 
@@ -167,6 +170,8 @@ Sends callback requests to external `http/https` services. It can trigger before
 ---
 
 ## `script`
+
+<PluginAvailability from="standard" />
 
 ### Purpose
 
@@ -242,7 +247,7 @@ Runs an explicitly configured external command and injects a stable subset of th
 - Source fields: `client_ip`, `client_port`, `server_name`, `url_path`
 - Runtime fields: `marks`, `has_resp`
 - Response fields: `rcode`, `rcode_name`, `resp_ip`
-- Cron metadata: `cron_plugin_tag`, `cron_job_name`, `cron_trigger_kind`, `cron_scheduled_at_unix_ms`
+- Cron metadata: `cron_plugin_tag`, `cron_job_name`, `cron_trigger_kind` (`schedule`, `interval`, or `manual`), `cron_scheduled_at_unix_ms`
 
 ### Behavior
 
@@ -263,6 +268,8 @@ Runs an explicitly configured external command and injects a stable subset of th
 ---
 
 ## `ipset`
+
+<PluginAvailability from="full" />
 
 ### Purpose
 
@@ -341,6 +348,8 @@ Here, `family` is `inet` or `inet6`.
 ---
 
 ## `nftset`
+
+<PluginAvailability from="full" />
 
 ### Purpose
 
@@ -458,6 +467,8 @@ Format:
 ---
 
 ## `ros_address_list`
+
+<PluginAvailability from="full" />
 
 ### Purpose
 
@@ -656,7 +667,9 @@ args:
 - The 180-second periodic reconcile runs only when `persistent` is configured and uses the in-memory set loaded during initialization; it never rereads files.
 - Dynamic entries are DNS observations rather than desired state, so they are excluded from startup and periodic full-table reconcile. Operator edits are not proactively corrected; only a later DNS observation that triggers a write may overwrite them.
 - Finite dynamic entries become eligible for refresh by a later DNS observation at 75% of their effective TTL. The plugin does not run a separate dynamic-refresh timer, and timeless entries are not refreshed automatically.
-- Before deleting an address-list row, the plugin rechecks its internal ID, target list/address key, and complete ownership comment. RouterOS `timeout` is lease data rather than a deletion-authorization condition. RouterOS still exposes final removal by internal ID and has no atomic compare-and-delete primitive.
+- Repeated observations of the same IP in the same list retain the latest valid expiry. Refresh writes set the RouterOS `timeout` from the remaining merged lease, so a later, shorter TTL does not prematurely end a still-valid lease.
+- Before updating or deleting an address-list row, the plugin rereads it by internal ID and list, then checks its normalized address key and complete ownership comment. This keeps differences in stored address text from hiding an existing row during revalidation. RouterOS `timeout` is lease data rather than a deletion-authorization condition. RouterOS still exposes final removal by internal ID and has no atomic compare-and-delete primitive.
+- RouterOS rejects an insert when the live list already holds the address, so the plugin treats that rejection as an idempotent outcome instead of a write error: it rescans the target list, updates the row through the normal ownership path when the row belongs to it, and otherwise leaves the key to the existing entry.
 
 ### Typical Uses
 
@@ -675,6 +688,8 @@ args:
 </Admonition>
 
 ## `ros_route`
+
+<PluginAvailability from="full" />
 
 ### Purpose
 

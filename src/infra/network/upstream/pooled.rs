@@ -22,7 +22,7 @@ use crate::proto::Message;
 #[derive(Debug)]
 pub(crate) struct PooledUpstream<C: Connection> {
     /// Connection metadata (remote address, port, etc.)
-    pub(crate) connection_info: ConnectionInfo,
+    pub(crate) connection_info: Arc<ConnectionInfo>,
     /// Connection pool for load balancing and connection reuse
     pub(crate) pool: Arc<dyn ConnectionPool<C>>,
 }
@@ -59,7 +59,7 @@ impl<C: Connection> Upstream for PooledUpstream<C> {
 #[derive(Debug)]
 pub(crate) struct UdpTruncatedUpstream {
     /// Connection configuration (includes timeout)
-    pub(crate) connection_info: ConnectionInfo,
+    pub(crate) connection_info: Arc<ConnectionInfo>,
     /// Primary UDP connection pool (fast path)
     pub(crate) main_pool: Arc<dyn ConnectionPool<UdpConnection>>,
     /// Fallback TCP connection pool (used when UDP response is truncated)
@@ -74,7 +74,8 @@ impl Upstream for UdpTruncatedUpstream {
 
         // Check if response was truncated (TC bit set)
         if response.truncated() {
-            // Log fallback event (only happens occasionally, minimal performance impact)
+            // Log fallback event (only happens occasionally, minimal
+            // performance impact)
             debug!("UDP response truncated, falling back to TCP");
 
             // Retry over TCP to get the full response

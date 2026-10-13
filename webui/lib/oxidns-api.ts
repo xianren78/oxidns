@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Sven Shi
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 "use client";
 
 import { activeEndpoint, useAuthStore } from "./auth-store";
@@ -107,6 +112,52 @@ export interface ProviderReloadResponse {
 }
 
 export class ProviderReloadBusyError extends Error {}
+
+export interface CronJobRunResponse {
+  ok: boolean;
+  job: string;
+  status: "started";
+  trigger: "manual";
+  run_id: number;
+}
+
+export type CronJobRunTrigger = "manual" | "schedule" | "interval";
+export type CronCurrentRunStatus = "pending" | "running";
+export type CronManualRunStatus =
+  | "completed"
+  | "completed_with_errors"
+  | "failed"
+  | "cancelled";
+
+export interface CronCurrentRun {
+  run_id: number;
+  trigger: CronJobRunTrigger;
+  status: CronCurrentRunStatus;
+  started_at_ms: number;
+}
+
+export interface CronManualRunResult {
+  run_id: number;
+  status: CronManualRunStatus;
+  executor_error_count: number;
+  completed_at_ms: number;
+}
+
+export interface CronJobRunSnapshot {
+  current_run: CronCurrentRun | null;
+  last_manual_run: CronManualRunResult | null;
+}
+
+export interface CronJobsStatusResponse {
+  ok: boolean;
+  jobs: Record<string, CronJobRunSnapshot>;
+}
+
+export class CronJobAlreadyRunningError extends Error {}
+
+export class CronJobNotFoundError extends Error {}
+
+export class CronJobUnavailableError extends Error {}
 
 export type ProcessMemoryKind =
   | "rss"
@@ -322,9 +373,12 @@ export interface QueryRecordFilters {
   sinceMs?: number;
   untilMs?: number;
   qname?: string;
+  qnameExact?: string;
   qtype?: string;
   clientIp?: string;
+  clientIpExact?: string;
   rcode?: string;
+  rcodeBucket?: "_ERROR" | "_NO_RESPONSE" | "_UNKNOWN";
   status?: QueryRecordStatusFilter;
   matcherTag?: string;
 }
@@ -345,7 +399,14 @@ export interface QueryRecorderPluginStatsRow {
   query_share: number;
 }
 
-export interface QueryRecorderPluginStatsResponse {
+export interface QueryRecorderSampleMetadata {
+  sample_limit: number;
+  sample_truncated: boolean;
+  sample_since_ms: number | null;
+  sample_until_ms: number | null;
+}
+
+export interface QueryRecorderPluginStatsResponse extends QueryRecorderSampleMetadata {
   ok: boolean;
   query_total: number;
   stats: QueryRecorderPluginStatsRow[];
@@ -357,7 +418,7 @@ export interface QueryRecorderTopRow {
   share: number;
 }
 
-export interface QueryRecorderTopResponse {
+export interface QueryRecorderTopResponse extends QueryRecorderSampleMetadata {
   ok: boolean;
   sample_size: number;
   rows: QueryRecorderTopRow[];
@@ -369,7 +430,7 @@ export interface QueryRecorderDistributionRow {
   share: number;
 }
 
-export interface QueryRecorderDistributionResponse {
+export interface QueryRecorderDistributionResponse extends QueryRecorderSampleMetadata {
   ok: boolean;
   sample_size: number;
   rows: QueryRecorderDistributionRow[];
@@ -387,7 +448,7 @@ export interface QueryRecorderLatencySlowRow {
   max_ms: number;
 }
 
-export interface QueryRecorderLatencySummary {
+export interface QueryRecorderLatencySummary extends QueryRecorderSampleMetadata {
   ok: boolean;
   sample_size: number;
   avg_ms: number;
@@ -399,18 +460,20 @@ export interface QueryRecorderLatencySummary {
   slow_top: QueryRecorderLatencySlowRow[];
 }
 
-export type QueryRecorderTimeseriesBucket = "minute" | "hour";
+export type QueryRecorderTimeseriesBucket = "auto" | "minute" | "hour";
 
 export interface QueryRecorderTimeseriesPoint {
   bucket_ms: number;
   total: number;
   error_count: number;
   no_response_count: number;
+  servfail_count: number;
+  partial: boolean;
   avg_ms: number;
   p95_ms: number;
 }
 
-export interface QueryRecorderTimeseriesResponse {
+export interface QueryRecorderTimeseriesResponse extends QueryRecorderSampleMetadata {
   ok: boolean;
   sample_size: number;
   bucket_ms: number;
@@ -566,6 +629,60 @@ export async function reloadProvider(
     }
     throw error;
   }
+}
+
+export async function runCronJob(
+  tag: string,
+  jobName: string,
+  signal?: AbortSignal,
+): Promise<CronJobRunResponse> {
+  const response = await fetch(
+    apiUrl(
+      `/plugins/${encodeURIComponent(tag)}/jobs/${encodeURIComponent(jobName)}/run`,
+    ),
+    {
+      method: "POST",
+      headers: apiHeaders(),
+      signal,
+    },
+  );
+  try {
+    return await readJsonResponse<CronJobRunResponse>(response);
+  } catch (error) {
+    if (response.status === 409) {
+      throw new CronJobAlreadyRunningError(
+        error instanceof Error ? error.message : "Cron job is already running",
+      );
+    }
+    if (response.status === 404) {
+      throw new CronJobNotFoundError(
+        error instanceof Error ? error.message : "Cron job was not found",
+      );
+    }
+    if (response.status === 503) {
+      throw new CronJobUnavailableError(
+        error instanceof Error
+          ? error.message
+          : "Cron scheduler is unavailable",
+      );
+    }
+    throw error;
+  }
+}
+
+export async function fetchCronJobStatuses(
+  tag: string,
+  signal?: AbortSignal,
+): Promise<CronJobsStatusResponse> {
+  const response = await fetch(
+    apiUrl(`/plugins/${encodeURIComponent(tag)}/jobs/status`),
+    {
+      method: "GET",
+      headers: apiHeaders(),
+      signal,
+    },
+  );
+  return readJsonResponse<CronJobsStatusResponse>(response);
 }
 
 export async function fetchCacheEntries(
@@ -1071,9 +1188,13 @@ function appendQueryRecordFilters(
     params.set("until_ms", String(options.untilMs));
   }
   if (options.qname) params.set("qname", options.qname);
+  if (options.qnameExact) params.set("qname_exact", options.qnameExact);
   if (options.qtype) params.set("qtype", options.qtype);
   if (options.clientIp) params.set("client_ip", options.clientIp);
+  if (options.clientIpExact)
+    params.set("client_ip_exact", options.clientIpExact);
   if (options.rcode) params.set("rcode", options.rcode);
+  if (options.rcodeBucket) params.set("rcode_bucket", options.rcodeBucket);
   if (options.status && options.status !== "all") {
     params.set("status", options.status);
   }
@@ -1161,4 +1282,58 @@ function previewResponseText(text: string) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+export interface DownloadItem {
+  index: number;
+  url: string;
+  path: string;
+}
+
+export interface DownloadListResponse {
+  ok: boolean;
+  running: boolean;
+  downloads: DownloadItem[];
+}
+
+export interface DownloadResult {
+  ok: boolean;
+  total: number;
+  succeeded: number;
+  failed: number;
+}
+
+export class DownloadBusyError extends Error {}
+
+export async function fetchDownloads(
+  tag: string,
+  signal?: AbortSignal,
+): Promise<DownloadListResponse> {
+  const response = await fetch(
+    apiUrl(`/plugins/${encodeURIComponent(tag)}/downloads`),
+    {
+      headers: apiHeaders(),
+      cache: "no-store",
+      signal,
+    },
+  );
+  return readJsonResponse<DownloadListResponse>(response);
+}
+
+export async function runDownload(
+  tag: string,
+  index?: number,
+): Promise<DownloadResult> {
+  const response = await fetch(
+    apiUrl(`/plugins/${encodeURIComponent(tag)}/download`),
+    {
+      method: "POST",
+      headers: { ...apiHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify(index === undefined ? {} : { index }),
+    },
+  );
+  if (response.status === 409) {
+    throw new DownloadBusyError(tClient(WEBUI.download.busy));
+  }
+  return readJsonResponse<DownloadResult>(response);
 }

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Sven Shi
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 use std::path::{Component, Path, PathBuf};
 
 use bytes::Bytes;
@@ -62,9 +65,9 @@ impl StaticFileServer {
     // Resolve a request path to an on-disk file. Order:
     // 1. Exact file at <root>/<path>.
     // 2. Directory index at <root>/<path>/<index>.
-    // 3. Sibling <root>/<path>.html (Next.js static export emits clean URLs like
-    //    /logs → logs.html alongside an empty logs/ directory of build metadata, so
-    //    refreshing /logs must serve logs.html, not 404).
+    // 3. Sibling <root>/<path>.html (Next.js static export emits clean URLs
+    //    like /logs → logs.html alongside an empty logs/ directory of build
+    //    metadata, so refreshing /logs must serve logs.html, not 404).
     // 4. Fallback to <root>/<index> so SPA-style client routes still load.
     async fn resolve_path(&self, relative: &Path) -> PathBuf {
         if relative.as_os_str().is_empty() {

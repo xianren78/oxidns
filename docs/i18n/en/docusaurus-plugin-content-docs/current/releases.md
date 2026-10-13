@@ -7,10 +7,58 @@ import ReleaseCard from '@site/src/components/ReleaseCard';
 
 # Release Notes
 
+## 2026-10
+
+<div className="release-stack">
+   <ReleaseCard version="v1.6.1" badge="Patch Release" date="2026-10-08" defaultOpen>
+       **Release Scope**
+
+       - v1.6.1 focuses on upstream connection cleanup and IPv6 address parsing, fixing resources retained by background tasks after connection closure and improving connection-pool diagnostics.
+
+       **Changes**
+
+       - `fix(upstream)`: stop TCP/UDP background I/O tasks and cancel pending queries promptly when connections close. TCP senders also exit after write failures or when closure interrupts a blocked write, preventing closed connections from retaining memory and sockets.
+       - `fix(ipv6)`: recognize bracketed IPv6 literals in upstream URLs and connect directly to the IP instead of treating it as a domain requiring bootstrap resolution. Upstream probes also report these addresses as literals.
+       - `fix(logging)`: add upstream identity, host, port, and transport context to pool and connection-close logs. Record cancelled concurrent-forwarding queries at debug level to reduce warnings during normal races.
+       - `deps`: update locked Rust dependencies, including HTTP/TLS support libraries and serialization dependencies.
+
+       **Compatibility and Upgrade Notes**
+
+       - The root crate is `1.6.1`; use release tag `v1.6.1`. Workspace support-crate versions remain unchanged.
+       - v1.6.0 YAML configurations upgrade directly. No fields are added, renamed, or removed, and existing defaults and bundles remain unchanged. Run `oxidns check -c <config-file>` before upgrading.
+       - Upgrading from v1.6.0 requires no query-history migration or Windows service reinstallation. Upgrades from earlier versions must still follow the v1.6.0 query-history and Windows service migration notes.
+   </ReleaseCard>
+</div>
+
+## 2026-09
+
+<div className="release-stack">
+   <ReleaseCard version="v1.6.0" badge="Minor Release" date="2026-09-24">
+       **Release Scope**
+
+       - v1.6.0 updates query-history storage and Windows service recovery, with improvements to scheduled jobs, manual downloads, DNS networking, and WebUI configuration editing.
+       - **Read before upgrading**: `query_recorder` v2 history starts empty; v1 history is neither migrated nor deleted automatically. Existing Windows services must be reinstalled to receive the new SCM recovery settings.
+
+       **Changes**
+
+       - `perf(query_recorder)`: v2 shares repeated execution paths and question lists in SQLite and losslessly compresses eligible response snapshots in the background writer. Configuration, query APIs, filtering, statistics, and SSE remain compatible.
+       - `fix(service)`: route Windows application restarts through SCM recovery actions configured at installation; fix lost restart signals and service recovery after shutdown.
+       - `feat(cron/download)`: add manual scheduled-job execution with result tracking, plus manual download controls and corresponding WebUI actions.
+       - `fix(network/ripset)`: improve UDP reply source selection and Windows UDP socket behavior, preserve in-flight DNS work after client disconnects, support ipset protocol 6, and retain nftset lookup errors.
+       - `feat(webui)`: improve plugin field layout, preserve YAML formatting during edits, and add confirmation for configuration patches.
+
+       **Compatibility and Upgrade Notes**
+
+       - The root crate is `1.6.0`, `oxidns-proto` is `0.1.6`, and `oxidns-ripset` is `0.1.3`; use release tag `v1.6.0`. Existing YAML configurations upgrade directly. Run `oxidns check -c <config-file>` before replacing the binary.
+       - **Query-history migration**: only new v2 records appear after upgrade. Old v1 tables are not read or migrated, and neither WebUI/API “clear history” nor retention cleanup removes them, so they continue to consume disk space. To discard all history and reclaim space, stop OxiDNS and back up the database. Only if `query_recorder.path` points to a file dedicated to that recorder, manually delete the SQLite file and its matching `-wal` and `-shm` files before restarting. If multiple recorders share the file, never delete the whole file; keep it and remove only the target recorder's old tables as described in the plugin reference.
+       - **Windows service migration**: in an elevated shell, stop and uninstall the old service, replace the binary with v1.6.0, then reinstall with the original working directory and config path and start it: `oxidns.exe service stop`, `oxidns.exe service uninstall`, `oxidns.exe service install -d <absolute-working-dir> -c <config-file>`, `oxidns.exe service start`. Replacing the binary or restarting the old service alone does not update SCM recovery settings.
+   </ReleaseCard>
+</div>
+
 ## 2026-08
 
 <div className="release-stack">
-   <ReleaseCard version="v1.5.2" badge="Patch Release" date="2026-08-18" defaultOpen>
+   <ReleaseCard version="v1.5.2" badge="Patch Release" date="2026-08-18">
        **Release Scope**
 
        - Patch Release. v1.5.2 focuses on trusted client-IP restoration, isolated dual-stack preference probes, efficient large-rule loading, and safe runtime lifecycles. It also adds sequence mark-set operations and hardens the release pipeline.

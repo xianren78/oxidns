@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Sven Shi
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import type { PluginKindDefinition } from "./shared";
 import { stringArrayField } from "./shared";
 
@@ -34,7 +39,7 @@ export const providerPluginDefinitions: PluginKindDefinition[] = [
           label: "引用 provider",
           referenceTypes: ["provider"],
           referencePrefix: "",
-          placeholder: "shared_domains",
+          example: "shared_domains",
         },
       ),
     ],
@@ -52,8 +57,7 @@ export const providerPluginDefinitions: PluginKindDefinition[] = [
         label: "规则文件",
         type: "text",
         required: true,
-        fullWidth: true,
-        placeholder: "/etc/oxidns/learned-allow.txt",
+        example: "/etc/oxidns/learned-allow.txt",
       },
       stringArrayField(
         "bootstrap_rules",
@@ -101,7 +105,7 @@ export const providerPluginDefinitions: PluginKindDefinition[] = [
         label: "geosite.dat",
         type: "text",
         required: true,
-        placeholder: "/etc/oxidns/geosite.dat",
+        example: "/etc/oxidns/geosite.dat",
       },
       stringArrayField(
         "selectors",
@@ -167,7 +171,7 @@ export const providerPluginDefinitions: PluginKindDefinition[] = [
           label: "引用 provider",
           referenceTypes: ["provider"],
           referencePrefix: "",
-          placeholder: "shared_ip_set",
+          example: "shared_ip_set",
         },
       ),
     ],
@@ -185,7 +189,7 @@ export const providerPluginDefinitions: PluginKindDefinition[] = [
         label: "geoip.dat",
         type: "text",
         required: true,
-        placeholder: "/etc/oxidns/geoip.dat",
+        example: "/etc/oxidns/geoip.dat",
       },
       stringArrayField(
         "selectors",

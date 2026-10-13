@@ -41,6 +41,73 @@ title: 插件扩展 API
 
 导入缓存 dump。
 
+### cron
+
+#### `POST /api/plugins/<cron_tag>/jobs/<job_name>/run`
+
+立即启动一个已配置的 cron job。`job_name` 是经过 URL 编码的 `args.jobs[].name`；手动触发使用与定时触发相同的 executor 列表和重叠保护，但不会改变 `interval` 或 cron 表达式任务的原定计划。
+
+返回：
+
+* `202 Accepted`
+  * 任务已被后台接受，响应中的 `status` 为 `started`、`trigger` 为 `manual`，并包含本轮 `run_id`。`202` 不代表 executor 链已经成功结束。
+* `404 Not Found`
+  * 当前 cron runtime 中不存在该任务。
+* `409 Conflict`
+  * 同一任务已有一轮正在执行；请求返回 `cron_job_already_running`，不会排队。
+* `503 Service Unavailable`
+  * 手动触发队列已满、TaskCenter 正在停止或对应任务已经不可用。
+
+成功响应示例：
+
+```json
+{
+  "ok": true,
+  "job": "refresh_sets",
+  "status": "started",
+  "trigger": "manual",
+  "run_id": 12
+}
+```
+
+`run_id` 在单个已注册 job 的生命周期内从 `1` 递增，定时与手动运行共用同一序列；插件重新注册或进程重启后会重新计数。
+
+#### `GET /api/plugins/<cron_tag>/jobs/status`
+
+批量读取当前 cron runtime 中所有 job 的轻量状态，job 名称作为 `jobs` 对象的键：
+
+```json
+{
+  "ok": true,
+  "jobs": {
+    "refresh_sets": {
+      "current_run": {
+        "run_id": 12,
+        "trigger": "manual",
+        "status": "running",
+        "started_at_ms": 1780000000000
+      },
+      "last_manual_run": null
+    },
+    "cleanup": {
+      "current_run": null,
+      "last_manual_run": {
+        "run_id": 8,
+        "status": "completed_with_errors",
+        "executor_error_count": 2,
+        "completed_at_ms": 1780000001000
+      }
+    }
+  }
+}
+```
+
+- `current_run.trigger` 为 `manual`、`schedule` 或 `interval`，`status` 为 `pending` 或 `running`。
+- `last_manual_run.status` 为 `completed`、`completed_with_errors`、`failed` 或 `cancelled`；正常返回错误的 executor 会计入 `executor_error_count`，但不会阻止后续 executor。
+- 时间字段都是 Unix 毫秒。接口只保留当前运行和最近一次手动结果，不提供历史、日志内容、结果详情或停止能力。
+
+WebUI 会在当前配置版本已经运行时显示“手动运行”按钮，并每 2 秒批量同步真实状态。编辑配置或保存后尚未应用时按钮隐藏；重新打开详情不会重放已经结束的旧结果。
+
 ### matcher
 
 配置在 `plugins:` 中、具有稳定 tag 的 matcher 都会注册以下运行时控制接口：
@@ -121,6 +188,17 @@ GET /api/plugins/reverse_lookup_main?ip=8.8.8.8
 * 未命中：空响应体。
 * 参数错误：`400 Bad Request`。
 
+
+### download
+
+`GET /api/plugins/<tag>/downloads` 返回正在运行的下载清单（`index`、`url`、`path`）和 `running` 状态。索引从 0 开始，对应运行中的配置。
+
+`POST /api/plugins/<tag>/download` 使用 `{"index": 0}` 下载单项，使用 `{}` 下载全部。请求等待下载完成后返回 HTTP 200，响应示例：`{"ok": true, "total": 1, "succeeded": 1, "failed": 0}`。部分或全部下载失败时 `ok` 为 `false`，`failed` 包含超时项；后续项仍按声明顺序执行。详情记录在服务端日志和现有下载指标中。
+
+输入格式错误返回 400，索引越界返回 404，已有下载运行时返回 409。手动请求与 pipeline/cron 下载共用运行锁，pipeline 执行会等待当前批次结束。接口需要同时启用 `api` 和 `plugin-download`，复用管理 API 认证。
+
+接口只允许下载已配置的目标，不能提交 URL 或输出路径。下载沿用插件现有的文件替换行为，不会触发 provider reload 或外层 sequence 的其它步骤。
+
 ### query\_recorder
 
 #### `GET /api/plugins/<tag>/records`
@@ -147,6 +225,8 @@ GET /api/plugins/reverse_lookup_main?ip=8.8.8.8
   * 按响应码精确匹配。
 * `status=all|error|has_response|no_response`
   * 按记录状态过滤。
+* `matcher_tag=<tag>`
+  * 按 Matcher 标签精确筛选命中的查询，支持历史标签；留空不筛选 Matcher。
 
 `client_ip` 是 DNS 传输层看到的对端地址。若记录列表或 `/stats/top_clients` 全部显示 `127.0.0.1`，通常说明请求先经过了本机转发器，例如 systemd-resolved、dnsmasq、AdGuardHome、dae 或 clash；请检查部署链路，让客户端直接访问 OxiDNS，或在 HTTP/DoH 反向代理场景配置可信的 `src_ip_header`。
 
@@ -218,7 +298,9 @@ GET /api/plugins/reverse_lookup_main?ip=8.8.8.8
 
 #### `DELETE /api/plugins/<tag>/records`
 
-清空当前 recorder 的所有历史查询记录和 `steps` 路径事件。清空操作会先 flush 后台写入队列，随后删除 SQLite 记录表中的所有行，并清空内存 tail。
+清空当前 recorder 的 v2 查询历史（包括 `steps` 路径事件）和内存回放缓存。操作会先 flush 后台写入队列；`cleared_records` 表示本次删除的 v2 查询记录数。
+
+**升级前的 v1 历史不会被清空，仍占用磁盘空间。** 其他 recorder 的数据也不受影响。如需手动清理 v1 历史，请仅删除对应的旧表，不要直接删除共用数据库。
 
 返回：
 
@@ -231,6 +313,10 @@ GET /api/plugins/reverse_lookup_main?ip=8.8.8.8
   "cleared_records": 128
 }
 ```
+
+所有 `/stats/*` 聚合接口必须提供 `since_ms` 和 `until_ms`（Unix 毫秒），开始时间须早于结束时间，跨度最多 24 小时；缺失或非法区间返回 HTTP 400。各项统计最多使用区间内按时间及记录 ID 倒序选取的最近 10,000 条查询记录。旧的不带时间调用需要补齐参数；记录列表、详情和 SSE 接口的时间参数语义保持不变。
+
+所有聚合响应均提供 `sample_limit`（10,000）、`sample_truncated`、`sample_since_ms`、`sample_until_ms`。仅额外探测一条判断截断，不参与统计；恰好 10,000 条不视为截断，无记录时入选时间为 `null`。记录和统计筛选额外支持 `qname_exact`、`client_ip_exact` 及 `rcode_bucket=_ERROR|_NO_RESPONSE|_UNKNOWN`，用于精确下钻；原有 `qname`、`client_ip` 的包含匹配语义不变。RCODE 特殊分类优先使用实际响应码，再依次判断执行错误、无响应、无响应码。
 
 #### `GET /api/plugins/<tag>/stats/plugins`
 
@@ -298,10 +384,26 @@ GET /api/plugins/reverse_lookup_main?ip=8.8.8.8
 
 查询参数：
 
-* `bucket=minute|hour`
+* `bucket=auto|minute|hour`
 * `buckets=<n>`
   * 返回桶数，默认 `60`，最大 `720`。
 * 同 `/records` 支持时间范围与过滤参数。
+
+返回字段：
+
+* `sample_size`、`sample_limit`：入选记录数及统计上限（10,000）。
+* `sample_truncated`：是否存在额外的匹配记录，仅探测第 10,001 条，恰好 10,000 条不视为截断。
+* `sample_since_ms`、`sample_until_ms`：入选记录最早／最晚时间；无记录时为 `null`。
+* `bucket_ms`：实际聚合间隔（毫秒）。
+* `points[]`：非空桶，包含 `bucket_ms`（桶起点）、`total`、`error_count`、`no_response_count`、`servfail_count`、`partial`、`avg_ms`、`p95_ms`。三种异常计数互斥。
+
+`bucket` 默认仍为 `minute`。`auto` 根据请求区间选择能容纳整个区间的最小常用粒度；记录截断时从最早入选记录开始计算。固定分钟／小时模式超过 `buckets` 时保留最近的非空桶；样本元数据描述所有入选记录。WebUI 的自动模式不丢弃覆盖范围内的桶。
+
+示例（查询指定历史区间）：
+
+```http
+GET /api/plugins/rec/stats/timeseries?since_ms=1700000000000&until_ms=1700003600000&bucket=auto&buckets=120
+```
 
 #### `GET /api/plugins/<tag>/stream`
 
