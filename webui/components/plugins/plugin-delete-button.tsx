@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Sven Shi
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 "use client";
 
 import { useState, type ComponentProps } from "react";
@@ -25,7 +30,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useAppStore, type PluginDeletePreview } from "@/lib/store";
+import {
+  useAppStore,
+  type PluginDeletePreview,
+  type PluginMutationResolution,
+} from "@/lib/store";
 import type { PluginInstance } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { WEBUI } from "@/lib/i18n";
@@ -103,13 +112,15 @@ export function PluginDeleteButton({
     }
   };
 
-  const runAction = async (action: () => Promise<void>) => {
+  const runAction = async (action: () => Promise<PluginMutationResolution>) => {
     setActionError(null);
     setLoading(true);
     try {
-      await action();
-      setOpen(false);
-      onDeleted?.();
+      const resolution = await action();
+      if (resolution !== "cancelled") {
+        setOpen(false);
+        onDeleted?.();
+      }
     } catch (error) {
       setActionError(
         error instanceof Error

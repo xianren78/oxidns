@@ -1,8 +1,13 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Sven Shi
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 "use client";
 
 import { useEffect } from "react";
 
-type PollingTask = () => void | Promise<void>;
+type PollingTask = (signal: AbortSignal) => void | Promise<void>;
 type PollingSessionKey = string | number | boolean | null | undefined;
 
 /**
@@ -25,6 +30,7 @@ export function useVisiblePolling(
     let disposed = false;
     let running = false;
     let timer: number | null = null;
+    let controller: AbortController | null = null;
 
     const clearTimer = () => {
       if (timer !== null) {
@@ -55,11 +61,13 @@ export function useVisiblePolling(
         return;
       }
       running = true;
+      controller = new AbortController();
       try {
-        await task();
+        await task(controller.signal);
       } catch {
         // A later polling round can recover from transient API failures.
       } finally {
+        controller = null;
         running = false;
         schedule();
       }
@@ -71,6 +79,7 @@ export function useVisiblePolling(
         void run();
       } else {
         clearTimer();
+        controller?.abort();
       }
     };
 
@@ -82,6 +91,7 @@ export function useVisiblePolling(
     return () => {
       disposed = true;
       clearTimer();
+      controller?.abort();
       if (!runInBackground) {
         document.removeEventListener(
           "visibilitychange",

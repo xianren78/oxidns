@@ -86,6 +86,7 @@ impl ConnectionBuilder<NoopConnection> for NoopConnectionBuilder {
         &self,
         _conn_id: u16,
         _deadline: QueryDeadline,
+        _connection_info: Arc<ConnectionInfo>,
     ) -> Result<Arc<NoopConnection>> {
         Ok(Arc::new(NoopConnection {
             available: AtomicBool::new(true),
@@ -751,7 +752,7 @@ async fn test_pooled_upstream_lets_pool_handle_deadline_expiry() {
         ConnectionInfo::with_addr("tcp://127.0.0.1").expect("upstream should parse");
     connection_info.timeout = Duration::from_millis(10);
     let upstream = PooledUpstream::<NoopConnection> {
-        connection_info,
+        connection_info: Arc::new(connection_info),
         pool: Arc::new(DeadlineHandlingPool {
             handled_timeout: handled_timeout.clone(),
         }),
@@ -837,9 +838,10 @@ fn test_parse_socks5_opt_ipv6_full_address() {
 
 #[test]
 fn test_parse_socks5_opt_ipv6_missing_bracket() {
-    // Test IPv6 without brackets - this actually succeeds for simple cases like ::1
-    // because rfind(':') correctly splits "::1:1080" into "::1" and "1080"
-    // However, brackets are still RECOMMENDED for clarity and standards compliance
+    // Test IPv6 without brackets - this actually succeeds for simple cases like
+    // ::1 because rfind(':') correctly splits "::1:1080" into "::1" and
+    // "1080" However, brackets are still RECOMMENDED for clarity and
+    // standards compliance
     let result = parse_socks5_opt("::1:1080");
     assert!(result.is_some());
 

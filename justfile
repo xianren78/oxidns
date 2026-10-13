@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Sven Shi
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 set positional-arguments
 
 # Run the standard local quality gate without mutating source files.
@@ -32,7 +35,7 @@ check-full:
     cargo +nightly clippy --all-features --all-targets -- -D warnings
 
 # Private/profiling features that should never be enabled on their own.
-_hack_excluded := "hotpath,hotpath-alloc,_tls-base,_tls-client,_tls-server,_http-server,_http-client"
+_hack_excluded := "hotpath,hotpath-alloc,_task-cron,_tls-base,_tls-client,_tls-server,_http-server,_http-client"
 
 # Compile every public feature individually (and the bare no-default-features
 # core). Catches "feature X fails to build in isolation" regressions.
@@ -58,4 +61,3 @@ test-standard:
 # clippy gates + bundle tests + the all-features test suite.
 check-matrix: check-each-feature check-minimal check-standard check-full test-minimal test-standard
     cargo test --all-features
-

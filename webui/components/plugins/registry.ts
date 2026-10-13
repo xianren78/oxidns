@@ -1,8 +1,14 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Sven Shi
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import type { PluginInstance } from "@/lib/types";
 import type { PluginComponentDefinition } from "./types";
 import { sequencePlugin } from "./kinds/sequence";
 import { cachePlugin } from "./kinds/cache";
 import { queryRecorderPlugin } from "./kinds/query-recorder";
+import { downloadPlugin } from "./kinds/download";
 import { cronPlugin } from "./kinds/cron";
 import { dynamicDomainSetPlugin } from "./kinds/dynamic-domain-set";
 
@@ -18,6 +24,7 @@ export const pluginComponentRegistry: Record<
   cache: cachePlugin,
   query_recorder: queryRecorderPlugin,
   cron: cronPlugin,
+  download: downloadPlugin,
   dynamic_domain_set: dynamicDomainSetPlugin,
 };
 

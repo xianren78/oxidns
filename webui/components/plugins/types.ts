@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Sven Shi
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import type { ComponentType } from "react";
 import type { ReactNode } from "react";
 import type { PluginInstance } from "@/lib/types";
@@ -49,6 +54,10 @@ export interface PluginDetailTemplateProps extends PluginDetailComponentProps {
   summaryItems?: PluginSummaryItem[];
   configContent?: ReactNode;
   metricsContent?: ReactNode;
+  statsTabLabel?: ReactNode;
+  tabValue?: string;
+  onTabValueChange?: (value: string) => void;
+  runtimeContent?: ReactNode;
   /**
    * Extra top-level tabs rendered after the metrics tab and before built-in metrics.
    * Use this when a plugin wants to expose a view that is conceptually peer to

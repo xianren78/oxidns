@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Sven Shi
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { describe, expect, it } from "vitest";
 
 import { pluginKindDefinitions } from "@/lib/plugin-definitions";
@@ -38,8 +43,13 @@ function auditChild(
   if (field.description && typeof localized?.description !== "string") {
     missing.push(`${kindPrefix}.fields.${path}.description`);
   }
-  if (field.placeholder && typeof localized?.placeholder !== "string") {
-    missing.push(`${kindPrefix}.fields.${path}.placeholder`);
+  const example = field.example ?? field.placeholder;
+  if (
+    example &&
+    typeof localized?.example !== "string" &&
+    typeof localized?.placeholder !== "string"
+  ) {
+    missing.push(`${kindPrefix}.fields.${path}.example`);
   }
   if (field.type === "object") {
     auditFields(field.fields, path, kindPrefix, messages, missing);
@@ -73,6 +83,7 @@ function auditFields(
     for (const property of [
       "label",
       "description",
+      "example",
       "placeholder",
       "keyPlaceholder",
       "valuePlaceholder",

@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2025 Sven Shi
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! DNS enums used by the owned message model.
 
@@ -489,7 +489,8 @@ impl DNSClass {
 
     /// Return the OPT version from value
     pub fn for_opt(value: u16) -> Self {
-        // From RFC 6891: `Values lower than 512 MUST be treated as equal to 512`
+        // From RFC 6891: `Values lower than 512 MUST be treated as equal to
+        // 512`
         let value = value.max(512);
         Self::OPT(value)
     }
