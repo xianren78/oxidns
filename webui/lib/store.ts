@@ -72,7 +72,8 @@ import {
   type ConfigSnapshot,
 } from "./config-history";
 import { WEBUI, tClient } from "./i18n";
-import { useAuthStore } from "./auth-store";
+import { getActiveEndpoint, useAuthStore } from "./auth-store";
+import { probeEndpoint, type Endpoint } from "./endpoints";
 import {
   isReservedPluginTag,
   pluginTagValidationMessageKey,
@@ -138,6 +139,10 @@ export interface ConfigPatchConfirmation {
 }
 
 interface AppState {
+  queryRecorderTabs: Record<string, string>;
+  setQueryRecorderTab: (tag: string, tab: string) => void;
+  queryRecorderLiveTags: string[];
+  setQueryRecorderLive: (tag: string, enabled: boolean) => void;
   plugins: PluginInstance[];
   health: HealthResponse | null;
   buildInfo: BuildInfo | null;
@@ -201,7 +206,7 @@ interface AppState {
   validateCurrentConfig: () => Promise<void>;
   saveConfig: () => Promise<void>;
   applyConfig: () => Promise<void>;
-  restartApp: () => Promise<void>;
+  restartApp: (nextEndpoint?: Endpoint) => Promise<void>;
   restoreSnapshot: (id: string) => void;
   rollbackToSnapshot: (id: string) => Promise<void>;
   deleteConfigSnapshot: (id: string) => void;
@@ -266,13 +271,21 @@ interface PendingConfigPatch {
 let pendingConfigPatch: PendingConfigPatch | null = null;
 
 function currentBackendKey(): string {
-  const { connectionEpoch, serverConfig } = useAuthStore.getState();
-  return `${connectionEpoch}\0${serverConfig.url.trim()}`;
+  const auth = useAuthStore.getState();
+  return `${auth.connectionEpoch}\0${auth.activeEndpointId}\0${getActiveEndpoint(auth)?.url.trim() ?? ""}`;
 }
 
 function isCurrentBackend(backendKey: string): boolean {
   const auth = useAuthStore.getState();
   return auth.isConnected && currentBackendKey() === backendKey;
+}
+
+function assertBackendUnchanged(backendKey: string): void {
+  if (currentBackendKey() !== backendKey)
+    throw new DOMException(
+      tClient(WEBUI.endpoints.sessionChanged),
+      "AbortError",
+    );
 }
 
 function enqueueConfigSave(
@@ -282,7 +295,11 @@ function enqueueConfigSave(
   pendingConfigSaveCount += 1;
   set({ isConfigSaving: true });
 
-  const run = () => task();
+  const backendKey = currentBackendKey();
+  const run = () => {
+    assertBackendUnchanged(backendKey);
+    return task();
+  };
   const current = queuedConfigSave.then(run, run);
   queuedConfigSave = current.catch(() => {});
 
@@ -296,6 +313,18 @@ const initialConfigModel = createDefaultOxiDnsConfig();
 const initialConfigText = stringifyOxiDnsConfig(initialConfigModel);
 
 export const useAppStore = create<AppState>((set, get) => ({
+  queryRecorderTabs: {},
+  setQueryRecorderTab: (tag, tab) =>
+    set((state) => ({
+      queryRecorderTabs: { ...state.queryRecorderTabs, [tag]: tab },
+    })),
+  queryRecorderLiveTags: [],
+  setQueryRecorderLive: (tag, enabled) =>
+    set((state) => ({
+      queryRecorderLiveTags: enabled
+        ? [...new Set([...state.queryRecorderLiveTags, tag])]
+        : state.queryRecorderLiveTags.filter((item) => item !== tag),
+    })),
   plugins: [],
   health: null,
   buildInfo: null,
@@ -458,6 +487,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       configError: null,
       runningDependencyGraph: null,
     });
+    const runtimeRefresh = get().refreshRuntimeState();
     try {
       const response = await fetchConfigFile();
       if (
@@ -488,7 +518,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         return;
       }
       set({ runningDependencyGraph: get().dependencyGraph });
-      await get().refreshRuntimeState();
       if (
         generation !== configLoadGeneration ||
         !isCurrentBackend(backendKey)
@@ -512,6 +541,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             : tClient(WEBUI.storeErrors.readConfigFailed),
       });
     } finally {
+      await runtimeRefresh;
       if (generation === configLoadGeneration) {
         set({ isConfigLoading: false });
       }
@@ -738,14 +768,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   validateCurrentConfig: async () => {
+    const backendKey = currentBackendKey();
     const generation = ++configValidationGeneration;
     const state = get();
     if (state.configError) return;
     try {
       const response = await validateConfigText(state.configText);
+      assertBackendUnchanged(backendKey);
       if (generation !== configValidationGeneration) return;
       applyConfigValidationResponse(response, set);
     } catch (error) {
+      assertBackendUnchanged(backendKey);
       if (generation !== configValidationGeneration) return;
       const message =
         error instanceof Error
@@ -764,12 +797,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   // disk write and the running-config swap are never coupled.
   saveConfig: () =>
     enqueueConfigSave(set, async () => {
+      const backendKey = currentBackendKey();
       const state = get();
       if (state.configError) throw new Error(state.configError);
 
       set({ configError: null });
       try {
         const validation = await validateConfigText(state.configText);
+        assertBackendUnchanged(backendKey);
         applyConfigValidationResponse(validation, set);
         const content = state.configText;
         const response = await saveConfigFile({
@@ -778,6 +813,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           validate: true,
           reload: false,
         });
+        assertBackendUnchanged(backendKey);
         const scope = getScopeKey(response.path);
         recordSnapshot(scope, {
           content,
@@ -795,6 +831,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         });
         await get().refreshRuntimeState();
       } catch (error) {
+        assertBackendUnchanged(backendKey);
         const message =
           error instanceof Error
             ? error.message
@@ -880,7 +917,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Save the current config to disk and restart the server process. After the
   // restart request is accepted the client polls the health endpoint until a
   // fresh backend instance is observed, then reloads the config from it.
-  restartApp: async () => {
+  restartApp: async (nextEndpoint) => {
+    const endpointId = useAuthStore.getState().activeEndpointId;
     set({ isRestarting: true, restartPhase: "saving" });
     let savedVersion: string | null = null;
     try {
@@ -895,7 +933,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       set({ restartPhase: "requesting" });
       await requestRestart();
-      await pollReconnect(baseline, (phase) => set({ restartPhase: phase }));
+      if (nextEndpoint && nextEndpoint.id === endpointId) {
+        // Save and request restart with the currently accepted credentials.
+        // Only use the rotated credentials after the old process accepts it.
+        useAuthStore.getState().updateEndpoint(nextEndpoint.id, nextEndpoint);
+      }
+      await pollReconnect(
+        baseline,
+        (phase) => set({ restartPhase: phase }),
+        nextEndpoint,
+      );
+      if (nextEndpoint) await useAuthStore.getState().connect(nextEndpoint);
       set({ restartPhase: "reloading" });
       await get().loadConfig();
     } catch (error) {
@@ -972,6 +1020,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }),
 
   setMatcherMode: async (id, mode) => {
+    const backendKey = currentBackendKey();
     const plugin = get().plugins.find((candidate) => candidate.id === id);
     if (!plugin || plugin.type !== "matcher") return;
     const control = get().matcherControls[plugin.name];
@@ -995,6 +1044,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     try {
       const response = await requestMatcherMode(plugin.name, mode);
+      if (currentBackendKey() !== backendKey) return;
       set((state) => ({
         matcherControls: {
           ...state.matcherControls,
@@ -1006,6 +1056,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         },
       }));
     } catch (error) {
+      if (currentBackendKey() !== backendKey) return;
       const message =
         error instanceof Error
           ? error.message
@@ -1026,6 +1077,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   reloadProvider: async (id) => {
+    const backendKey = currentBackendKey();
     const plugin = get().plugins.find((candidate) => candidate.id === id);
     if (!plugin || plugin.type !== "provider") return;
     const current = get().providerReloads[plugin.name];
@@ -1043,6 +1095,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     try {
       await requestProviderReload(plugin.name);
+      if (currentBackendKey() !== backendKey) return;
       set((state) => {
         if (
           !state.plugins.some(
@@ -1062,6 +1115,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         };
       });
     } catch (error) {
+      if (currentBackendKey() !== backendKey) return;
       const message =
         error instanceof ProviderReloadBusyError
           ? tClient(WEBUI.plugins.providerReloadBusy)
@@ -1359,6 +1413,50 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 }));
 
+export function resetBackendState(): void {
+  configLoadGeneration += 1;
+  configValidationGeneration += 1;
+  matcherRefreshGeneration += 1;
+  activeBackendKey = null;
+  buildInfoBackendKey = null;
+  requestRateBaseline = null;
+  requestRateBaselineBackendKey = null;
+  cancelPendingConfigPatch(useAppStore.setState);
+  const initial = useAppStore.getInitialState();
+  useAppStore.setState({
+    plugins: [],
+    health: null,
+    system: null,
+    buildInfo: null,
+    reloadStatus: null,
+    pluginMetrics: {},
+    outboundMetrics: {},
+    trafficMetrics: initial.trafficMetrics,
+    dependencyGraph: null,
+    runningDependencyGraph: null,
+    matcherControls: {},
+    providerReloads: {},
+    configModel: createDefaultOxiDnsConfig(),
+    configText: "",
+    yamlConfig: "",
+    configVersion: null,
+    runningVersion: null,
+    configPath: "",
+    configError: null,
+    configDiagnostics: [],
+    configHistory: [],
+    configEditorBaseline: null,
+    isConfigLoading: false,
+    isOfflineMode: false,
+    offlineFileName: null,
+    historyOpen: false,
+  });
+}
+
+useAuthStore.subscribe((state, previous) => {
+  if (state.connectionEpoch !== previous.connectionEpoch) resetBackendState();
+});
+
 function applyConfigFileResponse(
   response: ConfigFileResponse,
   set: StoreSet,
@@ -1597,15 +1695,21 @@ function delay(ms: number): Promise<void> {
 async function pollReconnect(
   baseline: ProcessInstanceBaseline,
   onPhase?: (phase: "waiting_down" | "waiting_up") => void,
+  endpoint?: Endpoint,
 ): Promise<void> {
+  const backendKey = currentBackendKey();
   let sawDown = false;
 
   onPhase?.("waiting_down");
   const deadline = Date.now() + 90_000;
   while (Date.now() < deadline) {
     await delay(sawDown ? 1500 : 800);
+    assertBackendUnchanged(backendKey);
     try {
-      const health = await fetchHealth();
+      const health = endpoint
+        ? await probeEndpoint(endpoint)
+        : await fetchHealth();
+      assertBackendUnchanged(backendKey);
       const fresh =
         processInstanceChanged(health, baseline) ||
         (sawDown && !hasProcessIdentityBaseline(baseline));

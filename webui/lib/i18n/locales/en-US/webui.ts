@@ -7,6 +7,59 @@ import { zhCNWebui } from "../zh-CN/webui";
 import type { LocaleResourceShape } from "../../types";
 
 export const enUSWebui = {
+  endpoints: {
+    sessionChanged:
+      "The endpoint changed; the previous operation was cancelled.",
+    overview: "Instances",
+    manage: "Endpoints",
+    description: "Manage connections to your OxiDNS instances.",
+    overviewDescription:
+      "Each instance is checked independently, including when the active endpoint is offline.",
+    add: "Add endpoint",
+    edit: "Edit endpoint",
+    name: "Name",
+    url: "API URL",
+    urlHelp:
+      "Use an HTTP(S) API base URL, such as https://dns.example.com/api, or a same-origin path such as /api. A bare host URL adds /api.",
+    auth: "Requires authentication",
+    username: "Username",
+    password: "Password",
+    save: "Save endpoint",
+    test: "Test connection",
+    testing: "Testing…",
+    testSuccess: "Connection successful · {version}",
+    delete: "Delete endpoint",
+    deleteDescription: "Delete {name}? The OxiDNS instance will keep running.",
+    activate: "Switch to instance",
+    active: "Active",
+    switch: "Switch endpoint",
+    none: "No endpoint selected",
+    empty: "No endpoints yet. Add an OxiDNS instance to get started.",
+    online: "Online",
+    offline: "Offline",
+    unready: "Not ready",
+    unauthorized: "Authentication required",
+    idle: "Not checked",
+    checking: "Checking…",
+    nameRequired: "Enter an endpoint name.",
+    invalidUrl:
+      "Use an HTTP(S) URL without embedded credentials, query parameters, or fragments, or a same-origin API path.",
+    invalidHealth: "This address did not return an OxiDNS health response.",
+    refresh: "Refresh instances",
+    version: "Version",
+    uptime: "Uptime",
+    plugins: "Plugins",
+    latency: "Response time",
+    seconds: "{count} s",
+    milliseconds: "{count} ms",
+    remember: "Remember endpoint passwords",
+    rememberDescription:
+      "Save passwords in this browser. Turn off to keep passwords only for the current session.",
+    editAction: "Edit",
+    busy: "Wait for the current operation before switching endpoints.",
+    discardChanges:
+      "Switch endpoints and discard unsaved configuration changes?",
+  },
   metadata: {
     title: "OxiDNS - Console",
     description: "Management console for the programmable OxiDNS DNS system",
