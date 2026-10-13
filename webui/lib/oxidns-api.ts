@@ -789,7 +789,7 @@ export async function fetchQueryRecorderPluginStats(
 ): Promise<QueryRecorderPluginStatsResponse> {
   const params = new URLSearchParams();
   params.set("kind", options.kind ?? "all");
-  appendQueryRecordFilters(params, options);
+  appendQueryRecorderStatisticsFilters(params, options);
   const suffix = params.toString() ? `?${params.toString()}` : "";
   const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/stats/plugins${suffix}`),
@@ -825,7 +825,7 @@ export async function fetchQueryRecorderTopClients(
 ): Promise<QueryRecorderTopResponse> {
   const params = new URLSearchParams();
   if (options.limit) params.set("limit", String(options.limit));
-  appendQueryRecordFilters(params, options);
+  appendQueryRecorderStatisticsFilters(params, options);
   const suffix = params.toString() ? `?${params.toString()}` : "";
   const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/stats/top_clients${suffix}`),
@@ -840,7 +840,7 @@ export async function fetchQueryRecorderTopQnames(
 ): Promise<QueryRecorderTopResponse> {
   const params = new URLSearchParams();
   if (options.limit) params.set("limit", String(options.limit));
-  appendQueryRecordFilters(params, options);
+  appendQueryRecorderStatisticsFilters(params, options);
   const suffix = params.toString() ? `?${params.toString()}` : "";
   const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/stats/top_qnames${suffix}`),
@@ -854,7 +854,7 @@ export async function fetchQueryRecorderQtypeDistribution(
   options: QueryRecordFilters & { signal?: AbortSignal } = {},
 ): Promise<QueryRecorderDistributionResponse> {
   const params = new URLSearchParams();
-  appendQueryRecordFilters(params, options);
+  appendQueryRecorderStatisticsFilters(params, options);
   const suffix = params.toString() ? `?${params.toString()}` : "";
   const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/stats/qtype${suffix}`),
@@ -868,7 +868,7 @@ export async function fetchQueryRecorderRcodeDistribution(
   options: QueryRecordFilters & { signal?: AbortSignal } = {},
 ): Promise<QueryRecorderDistributionResponse> {
   const params = new URLSearchParams();
-  appendQueryRecordFilters(params, options);
+  appendQueryRecorderStatisticsFilters(params, options);
   const suffix = params.toString() ? `?${params.toString()}` : "";
   const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/stats/rcode${suffix}`),
@@ -886,7 +886,7 @@ export async function fetchQueryRecorderLatency(
 ): Promise<QueryRecorderLatencySummary> {
   const params = new URLSearchParams();
   if (options.slowLimit) params.set("slow_limit", String(options.slowLimit));
-  appendQueryRecordFilters(params, options);
+  appendQueryRecorderStatisticsFilters(params, options);
   const suffix = params.toString() ? `?${params.toString()}` : "";
   const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/stats/latency${suffix}`),
@@ -906,7 +906,7 @@ export async function fetchQueryRecorderTimeseries(
   const params = new URLSearchParams();
   if (options.bucket) params.set("bucket", options.bucket);
   if (options.buckets) params.set("buckets", String(options.buckets));
-  appendQueryRecordFilters(params, options);
+  appendQueryRecorderStatisticsFilters(params, options);
   const suffix = params.toString() ? `?${params.toString()}` : "";
   const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/stats/timeseries${suffix}`),
@@ -1174,6 +1174,34 @@ export async function fetchUpgradeStatus(): Promise<UpgradeStatusResponse> {
 export function apiUrl(path: string) {
   const baseUrl = getActiveEndpoint(useAuthStore.getState())?.url.trim() ?? "";
   return `${baseUrl.replace(/\/$/, "")}${path}`;
+}
+
+// Aggregation APIs require both bounds even when the caller uses the default
+// options. Keep explicit selections intact, and reject incomplete custom ranges
+// instead of silently querying a different interval.
+function appendQueryRecorderStatisticsFilters(
+  params: URLSearchParams,
+  options: QueryRecordFilters,
+) {
+  let { sinceMs, untilMs } = options;
+  if (sinceMs === undefined && untilMs === undefined) {
+    untilMs = Date.now();
+    sinceMs = Math.max(0, untilMs - 3_600_000);
+  }
+  if (
+    !Number.isSafeInteger(sinceMs) ||
+    !Number.isSafeInteger(untilMs) ||
+    sinceMs === undefined ||
+    untilMs === undefined ||
+    sinceMs < 0
+  ) {
+    throw new Error(tClient(WEBUI.queryRecorder.rangeRequired));
+  }
+  if (sinceMs >= untilMs)
+    throw new Error(tClient(WEBUI.queryRecorder.rangeOrder));
+  if (untilMs - sinceMs > 86_400_000)
+    throw new Error(tClient(WEBUI.queryRecorder.rangeSpan));
+  appendQueryRecordFilters(params, { ...options, sinceMs, untilMs });
 }
 
 function appendQueryRecordFilters(

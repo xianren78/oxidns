@@ -1164,7 +1164,7 @@ function MatcherStatsCard({
   onData,
 }: {
   tag: string;
-  filters: QueryRecordFilters;
+  filters: QueryRecordFilters & Pick<AggregationWindow, "sinceMs" | "untilMs">;
   onSelectMatcher: (matcherTag: string) => void;
   onRefresh: () => void;
   onData: (data: QueryRecorderSampleMetadata) => void;
