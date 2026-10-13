@@ -8,7 +8,7 @@
 import { useEffect, useState } from "react";
 import { AppHeader } from "@/components/shell/app-header";
 import { useAppStore } from "@/lib/store";
-import { useAuthStore } from "@/lib/auth-store";
+import { getActiveEndpoint, useAuthStore } from "@/lib/auth-store";
 import {
   useUpdateStore,
   DEFAULT_UPGRADE_CONFIG,
@@ -336,9 +336,17 @@ function OutboundRuntimeMetricsPanel({
 }
 
 export default function SettingsPage() {
+  const connectionEpoch = useAuthStore((s) => s.connectionEpoch);
+  return <SettingsContent key={connectionEpoch} />;
+}
+
+function SettingsContent() {
   const { t, formatDateTime } = useI18n();
-  const serverConfig = useAuthStore((s) => s.serverConfig);
-  const setServerConfig = useAuthStore((s) => s.setServerConfig);
+  const activeEndpoint = useAuthStore(getActiveEndpoint);
+  const updateEndpoint = useAuthStore((s) => s.updateEndpoint);
+  const setActiveEndpoint = (config: typeof activeEndpoint) => {
+    if (config) updateEndpoint(config.id, config);
+  };
   const connect = useAuthStore((s) => s.connect);
   const isConnected = useAuthStore((s) => s.isConnected);
   const isConnecting = useAuthStore((s) => s.isConnecting);
@@ -377,7 +385,7 @@ export default function SettingsPage() {
   const isRestarting = useAppStore((s) => s.isRestarting);
   const restartApp = useAppStore((s) => s.restartApp);
 
-  const [backendUrl, setBackendUrl] = useState(serverConfig.url);
+  const [backendUrl, setBackendUrl] = useState(activeEndpoint?.url ?? "");
   const [workerThreads, setWorkerThreads] = useState("");
   const [apiListen, setApiListen] = useState("");
   const [apiSslEnabled, setApiSslEnabled] = useState(false);
@@ -470,7 +478,8 @@ export default function SettingsPage() {
       : (system?.version ?? health?.version ?? "-");
 
   const handleSaveConnection = () => {
-    setServerConfig({ ...serverConfig, url: backendUrl.trim() });
+    if (activeEndpoint)
+      setActiveEndpoint({ ...activeEndpoint, url: backendUrl.trim() });
   };
 
   const runtimeVersionForCheck = system?.build
@@ -526,8 +535,9 @@ export default function SettingsPage() {
   };
 
   const handleConnect = async () => {
-    const nextConfig = { ...serverConfig, url: backendUrl.trim() };
-    setServerConfig(nextConfig);
+    if (!activeEndpoint) return;
+    const nextConfig = { ...activeEndpoint, url: backendUrl.trim() };
+    setActiveEndpoint(nextConfig);
     const ok = await connect(nextConfig);
     if (ok) await loadConfig();
   };
@@ -683,21 +693,13 @@ export default function SettingsPage() {
       throw error;
     }
 
-    if (enabled && uname.trim()) {
-      setServerConfig({
-        ...serverConfig,
-        requiresAuth: true,
-        username: uname.trim(),
-        password: pwd,
-      });
-    } else {
-      setServerConfig({
-        ...serverConfig,
-        requiresAuth: false,
-        username: "",
-        password: "",
-      });
-    }
+    if (!activeEndpoint) return;
+    const nextEndpoint = {
+      ...activeEndpoint,
+      requiresAuth: enabled,
+      username: enabled ? uname.trim() : "",
+      password: enabled ? pwd : "",
+    };
 
     setApiAuthEnabled(enabled);
     setApiAuthUsername(enabled ? uname : "");
@@ -705,7 +707,7 @@ export default function SettingsPage() {
     setAuthEditMode(null);
     setNewAuthPassword("");
     setConfirmAuthPassword("");
-    await restartApp();
+    await restartApp(nextEndpoint);
   };
 
   const addOutboundProfile = () => {

@@ -107,6 +107,7 @@ import {
   type QueryRecorderTimeseriesResponse,
   type QueryRecorderTopResponse,
 } from "@/lib/oxidns-api";
+import { apiFetch, assertCurrentResponse } from "@/lib/endpoint-session";
 import { useAppStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import type {
@@ -156,7 +157,11 @@ import {
 
 function QueryRecorderDetail(props: PluginDetailComponentProps) {
   const { t } = useI18n();
-  const [tab, setTab] = useState("config");
+  const tab = useAppStore(
+    (state) => state.queryRecorderTabs[props.plugin.name] ?? "config",
+  );
+  const setTab = (value: string) =>
+    useAppStore.getState().setQueryRecorderTab(props.plugin.name, value);
   const [selection, setSelection] = useState(() => presetWindow());
   const [insightsView, setInsightsView] = useState("timeseries");
   const [recordDrilldown, setRecordDrilldown] = useState<{
@@ -508,20 +513,14 @@ function QueryRecordsPanelInner({
     }
   };
 
-  const toggleStream = async () => {
-    if (streaming) {
-      abortRef.current?.abort();
-      abortRef.current = null;
-      setStreaming(false);
-      return;
-    }
-
+  const startStream = useCallback(async () => {
+    if (abortRef.current) return;
     const controller = new AbortController();
     abortRef.current = controller;
     setStreaming(true);
     setError(null);
     try {
-      const response = await fetch(
+      const response = await apiFetch(
         apiUrl(`/plugins/${encodeURIComponent(tag)}/stream?tail=20`),
         {
           headers: { ...apiHeaders(), Accept: "text/event-stream" },
@@ -539,6 +538,7 @@ function QueryRecordsPanelInner({
       while (!controller.signal.aborted) {
         const { done, value } = await reader.read();
         if (done) break;
+        assertCurrentResponse(response);
         buffer += decoder
           .decode(value, { stream: true })
           .replace(/\r\n/g, "\n")
@@ -584,6 +584,26 @@ function QueryRecordsPanelInner({
         setStreaming(false);
       }
     }
+  }, [tag, t]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (useAppStore.getState().queryRecorderLiveTags.includes(tag))
+        void startStream();
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      abortRef.current?.abort();
+    };
+  }, [tag, startStream]);
+
+  const toggleStream = () => {
+    useAppStore.getState().setQueryRecorderLive(tag, !streaming);
+    if (streaming) {
+      abortRef.current?.abort();
+      abortRef.current = null;
+      setStreaming(false);
+    } else void startStream();
   };
 
   const activeFilterCount = countActiveFilters(appliedFilters);

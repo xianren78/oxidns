@@ -5,7 +5,9 @@
 
 "use client";
 
-import { useAuthStore } from "./auth-store";
+import { getActiveEndpoint, useAuthStore } from "./auth-store";
+import { apiFetch, assertCurrentResponse } from "./endpoint-session";
+import { endpointHeaders } from "./endpoints";
 import { WEBUI, tClient } from "./i18n";
 import type { MatcherRuntimeMode } from "./matcher-control";
 
@@ -481,7 +483,7 @@ export interface QueryRecorderTimeseriesResponse extends QueryRecorderSampleMeta
 }
 
 export async function fetchConfigFile(): Promise<ConfigFileResponse> {
-  const response = await fetch(apiUrl("/config"), {
+  const response = await apiFetch(apiUrl("/config"), {
     method: "GET",
     headers: apiHeaders(),
   });
@@ -489,7 +491,7 @@ export async function fetchConfigFile(): Promise<ConfigFileResponse> {
 }
 
 export async function fetchHealth(): Promise<HealthResponse> {
-  const response = await fetch(apiUrl("/health"), {
+  const response = await apiFetch(apiUrl("/health"), {
     method: "GET",
     headers: apiHeaders(),
   });
@@ -497,7 +499,7 @@ export async function fetchHealth(): Promise<HealthResponse> {
 }
 
 export async function fetchBuildInfo(): Promise<BuildInfoResponse> {
-  const response = await fetch(apiUrl("/build"), {
+  const response = await apiFetch(apiUrl("/build"), {
     method: "GET",
     headers: apiHeaders(),
   });
@@ -505,7 +507,7 @@ export async function fetchBuildInfo(): Promise<BuildInfoResponse> {
 }
 
 export async function fetchControl(): Promise<ControlResponse> {
-  const response = await fetch(apiUrl("/control"), {
+  const response = await apiFetch(apiUrl("/control"), {
     method: "GET",
     headers: apiHeaders(),
   });
@@ -513,7 +515,7 @@ export async function fetchControl(): Promise<ControlResponse> {
 }
 
 export async function fetchSystem(): Promise<SystemResponse> {
-  const response = await fetch(apiUrl("/system"), {
+  const response = await apiFetch(apiUrl("/system"), {
     method: "GET",
     headers: apiHeaders(),
   });
@@ -521,7 +523,7 @@ export async function fetchSystem(): Promise<SystemResponse> {
 }
 
 export async function fetchReloadStatus(): Promise<ReloadSnapshot> {
-  const response = await fetch(apiUrl("/reload/status"), {
+  const response = await apiFetch(apiUrl("/reload/status"), {
     method: "GET",
     headers: apiHeaders(),
   });
@@ -531,7 +533,7 @@ export async function fetchReloadStatus(): Promise<ReloadSnapshot> {
 export async function validateConfigText(
   content: string,
 ): Promise<ConfigValidateResponse> {
-  const response = await fetch(apiUrl("/config/validate"), {
+  const response = await apiFetch(apiUrl("/config/validate"), {
     method: "POST",
     headers: {
       ...apiHeaders(),
@@ -548,7 +550,7 @@ export async function saveConfigFile({
   validate = true,
   reload = false,
 }: SaveConfigOptions): Promise<SaveConfigResponse> {
-  const response = await fetch(apiUrl("/config"), {
+  const response = await apiFetch(apiUrl("/config"), {
     method: "PUT",
     headers: {
       ...apiHeaders(),
@@ -566,7 +568,7 @@ export async function saveConfigFile({
 }
 
 export async function requestReload(): Promise<void> {
-  const response = await fetch(apiUrl("/reload"), {
+  const response = await apiFetch(apiUrl("/reload"), {
     method: "POST",
     headers: apiHeaders(),
   });
@@ -574,7 +576,7 @@ export async function requestReload(): Promise<void> {
 }
 
 export async function requestRestart(): Promise<void> {
-  const response = await fetch(apiUrl("/restart"), {
+  const response = await apiFetch(apiUrl("/restart"), {
     method: "POST",
     headers: apiHeaders(),
   });
@@ -584,7 +586,7 @@ export async function requestRestart(): Promise<void> {
 export async function fetchMatcherStatus(
   tag: string,
 ): Promise<MatcherStatusResponse> {
-  const response = await fetch(
+  const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/status`),
     {
       method: "GET",
@@ -598,7 +600,7 @@ export async function setMatcherMode(
   tag: string,
   mode: MatcherRuntimeMode,
 ): Promise<MatcherStatusResponse> {
-  const response = await fetch(
+  const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/mode`),
     {
       method: "POST",
@@ -612,7 +614,7 @@ export async function setMatcherMode(
 export async function reloadProvider(
   tag: string,
 ): Promise<ProviderReloadResponse> {
-  const response = await fetch(
+  const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/reload`),
     {
       method: "POST",
@@ -636,7 +638,7 @@ export async function runCronJob(
   jobName: string,
   signal?: AbortSignal,
 ): Promise<CronJobRunResponse> {
-  const response = await fetch(
+  const response = await apiFetch(
     apiUrl(
       `/plugins/${encodeURIComponent(tag)}/jobs/${encodeURIComponent(jobName)}/run`,
     ),
@@ -674,7 +676,7 @@ export async function fetchCronJobStatuses(
   tag: string,
   signal?: AbortSignal,
 ): Promise<CronJobsStatusResponse> {
-  const response = await fetch(
+  const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/jobs/status`),
     {
       method: "GET",
@@ -694,7 +696,7 @@ export async function fetchCacheEntries(
   if (options.cursor) params.set("cursor", options.cursor);
   if (options.qname) params.set("qname", options.qname);
   const suffix = params.toString() ? `?${params.toString()}` : "";
-  const response = await fetch(
+  const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/entries${suffix}`),
     { method: "GET", headers: apiHeaders() },
   );
@@ -702,7 +704,7 @@ export async function fetchCacheEntries(
 }
 
 export async function deleteCacheEntry(tag: string, id: string): Promise<void> {
-  const response = await fetch(
+  const response = await apiFetch(
     apiUrl(
       `/plugins/${encodeURIComponent(tag)}/entries/${encodeURIComponent(id)}`,
     ),
@@ -712,7 +714,7 @@ export async function deleteCacheEntry(tag: string, id: string): Promise<void> {
 }
 
 export async function flushCache(tag: string): Promise<void> {
-  const response = await fetch(
+  const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/flush`),
     {
       method: "GET",
@@ -723,12 +725,10 @@ export async function flushCache(tag: string): Promise<void> {
 }
 
 export async function fetchCacheDump(tag: string): Promise<Blob> {
-  const { serverConfig } = useAuthStore.getState();
-  const headers: Record<string, string> = {};
-  if (serverConfig.requiresAuth && serverConfig.username) {
-    headers.Authorization = `Basic ${btoa(`${serverConfig.username}:${serverConfig.password}`)}`;
-  }
-  const response = await fetch(
+  const activeEndpoint = getActiveEndpoint(useAuthStore.getState());
+  if (!activeEndpoint) throw new Error(tClient(WEBUI.endpoints.none));
+  const headers = endpointHeaders(activeEndpoint);
+  const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/dump`),
     { method: "GET", headers },
   );
@@ -747,15 +747,13 @@ export async function loadCacheDump(
   tag: string,
   data: ArrayBuffer,
 ): Promise<CacheLoadDumpResponse> {
-  const { serverConfig } = useAuthStore.getState();
-  const headers: Record<string, string> = {
-    Accept: "application/json",
+  const activeEndpoint = getActiveEndpoint(useAuthStore.getState());
+  if (!activeEndpoint) throw new Error(tClient(WEBUI.endpoints.none));
+  const headers = {
+    ...endpointHeaders(activeEndpoint),
     "Content-Type": "application/octet-stream",
   };
-  if (serverConfig.requiresAuth && serverConfig.username) {
-    headers.Authorization = `Basic ${btoa(`${serverConfig.username}:${serverConfig.password}`)}`;
-  }
-  const response = await fetch(
+  const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/load_dump`),
     { method: "POST", headers, body: data },
   );
@@ -775,7 +773,7 @@ export async function fetchQueryRecords(
   if (options.cursor) params.set("cursor", options.cursor);
   appendQueryRecordFilters(params, options);
   const suffix = params.toString() ? `?${params.toString()}` : "";
-  const response = await fetch(
+  const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/records${suffix}`),
     { method: "GET", headers: apiHeaders(), signal: options.signal },
   );
@@ -793,7 +791,7 @@ export async function fetchQueryRecorderPluginStats(
   params.set("kind", options.kind ?? "all");
   appendQueryRecordFilters(params, options);
   const suffix = params.toString() ? `?${params.toString()}` : "";
-  const response = await fetch(
+  const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/stats/plugins${suffix}`),
     { method: "GET", headers: apiHeaders(), signal: options.signal },
   );
@@ -804,7 +802,7 @@ export async function fetchQueryRecordDetail(
   tag: string,
   id: number,
 ): Promise<QueryRecordDetailResponse> {
-  const response = await fetch(
+  const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/records/${id}`),
     { method: "GET", headers: apiHeaders() },
   );
@@ -814,7 +812,7 @@ export async function fetchQueryRecordDetail(
 export async function clearQueryRecorderHistory(
   tag: string,
 ): Promise<QueryRecorderClearResponse> {
-  const response = await fetch(
+  const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/records`),
     { method: "DELETE", headers: apiHeaders() },
   );
@@ -829,7 +827,7 @@ export async function fetchQueryRecorderTopClients(
   if (options.limit) params.set("limit", String(options.limit));
   appendQueryRecordFilters(params, options);
   const suffix = params.toString() ? `?${params.toString()}` : "";
-  const response = await fetch(
+  const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/stats/top_clients${suffix}`),
     { method: "GET", headers: apiHeaders(), signal: options.signal },
   );
@@ -844,7 +842,7 @@ export async function fetchQueryRecorderTopQnames(
   if (options.limit) params.set("limit", String(options.limit));
   appendQueryRecordFilters(params, options);
   const suffix = params.toString() ? `?${params.toString()}` : "";
-  const response = await fetch(
+  const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/stats/top_qnames${suffix}`),
     { method: "GET", headers: apiHeaders(), signal: options.signal },
   );
@@ -858,7 +856,7 @@ export async function fetchQueryRecorderQtypeDistribution(
   const params = new URLSearchParams();
   appendQueryRecordFilters(params, options);
   const suffix = params.toString() ? `?${params.toString()}` : "";
-  const response = await fetch(
+  const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/stats/qtype${suffix}`),
     { method: "GET", headers: apiHeaders(), signal: options.signal },
   );
@@ -872,7 +870,7 @@ export async function fetchQueryRecorderRcodeDistribution(
   const params = new URLSearchParams();
   appendQueryRecordFilters(params, options);
   const suffix = params.toString() ? `?${params.toString()}` : "";
-  const response = await fetch(
+  const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/stats/rcode${suffix}`),
     { method: "GET", headers: apiHeaders(), signal: options.signal },
   );
@@ -890,7 +888,7 @@ export async function fetchQueryRecorderLatency(
   if (options.slowLimit) params.set("slow_limit", String(options.slowLimit));
   appendQueryRecordFilters(params, options);
   const suffix = params.toString() ? `?${params.toString()}` : "";
-  const response = await fetch(
+  const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/stats/latency${suffix}`),
     { method: "GET", headers: apiHeaders(), signal: options.signal },
   );
@@ -910,7 +908,7 @@ export async function fetchQueryRecorderTimeseries(
   if (options.buckets) params.set("buckets", String(options.buckets));
   appendQueryRecordFilters(params, options);
   const suffix = params.toString() ? `?${params.toString()}` : "";
-  const response = await fetch(
+  const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/stats/timeseries${suffix}`),
     { method: "GET", headers: apiHeaders(), signal: options.signal },
   );
@@ -944,7 +942,7 @@ export async function listDynamicDomainRules(
     params.set("cursor", String(options.cursor));
   if (options.limit !== undefined) params.set("limit", String(options.limit));
   const suffix = params.toString() ? `?${params.toString()}` : "";
-  const response = await fetch(
+  const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/rules${suffix}`),
     { method: "GET", headers: apiHeaders(), signal: options.signal },
   );
@@ -956,7 +954,7 @@ export async function appendDynamicDomainRules(
   rules: string[],
   rule_kind?: DynamicDomainRuleKind,
 ): Promise<DynamicDomainMutationResponse> {
-  const response = await fetch(
+  const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/rules`),
     {
       method: "POST",
@@ -972,7 +970,7 @@ export async function removeDynamicDomainRules(
   rules: string[],
   rule_kind?: DynamicDomainRuleKind,
 ): Promise<DynamicDomainMutationResponse> {
-  const response = await fetch(
+  const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/rules`),
     {
       method: "DELETE",
@@ -986,7 +984,7 @@ export async function removeDynamicDomainRules(
 export async function clearDynamicDomainRules(
   tag: string,
 ): Promise<DynamicDomainMutationResponse> {
-  const response = await fetch(
+  const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/rules/clear`),
     { method: "POST", headers: apiHeaders() },
   );
@@ -1018,7 +1016,7 @@ export async function fetchRecentLogs(params?: {
   if (params?.level) query.set("level", params.level);
   if (params?.limit) query.set("limit", String(params.limit));
   const suffix = query.size > 0 ? `?${query}` : "";
-  const response = await fetch(apiUrl(`/logs${suffix}`), {
+  const response = await apiFetch(apiUrl(`/logs${suffix}`), {
     method: "GET",
     headers: apiHeaders(),
   });
@@ -1034,7 +1032,7 @@ export async function streamLogs(
   if (params.level) query.set("level", params.level);
   if (params.tail !== undefined) query.set("tail", String(params.tail));
   const suffix = query.size > 0 ? `?${query}` : "";
-  const response = await fetch(apiUrl(`/logs/stream${suffix}`), {
+  const response = await apiFetch(apiUrl(`/logs/stream${suffix}`), {
     method: "GET",
     headers: { ...apiHeaders(), Accept: "text/event-stream" },
     signal,
@@ -1052,6 +1050,7 @@ export async function streamLogs(
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
+    assertCurrentResponse(response);
     buf += decoder.decode(value, { stream: true });
     const blocks = buf.split("\n\n");
     buf = blocks.pop() ?? "";
@@ -1071,7 +1070,7 @@ export async function streamLogs(
 }
 
 export async function fetchPrometheusMetrics(): Promise<string> {
-  const response = await fetch(apiUrl("/metrics"), {
+  const response = await apiFetch(apiUrl("/metrics"), {
     method: "GET",
     headers: { ...apiHeaders(), Accept: "text/plain" },
   });
@@ -1135,7 +1134,7 @@ export async function fetchUpgradeCheck(
   if (options.allowPrerelease) body.allow_prerelease = true;
   if (options.target) body.target = options.target;
   if (options.githubToken) body.github_token = options.githubToken;
-  const response = await fetch(apiUrl("/upgrade/check"), {
+  const response = await apiFetch(apiUrl("/upgrade/check"), {
     method: "POST",
     headers: { ...apiHeaders(), "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -1156,7 +1155,7 @@ export async function triggerUpgradeApply(
   if (options.cleanup !== undefined) body.cleanup = options.cleanup;
   if (options.target) body.target = options.target;
   if (options.githubToken) body.github_token = options.githubToken;
-  const response = await fetch(apiUrl("/upgrade/apply"), {
+  const response = await apiFetch(apiUrl("/upgrade/apply"), {
     method: "POST",
     headers: { ...apiHeaders(), "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -1165,7 +1164,7 @@ export async function triggerUpgradeApply(
 }
 
 export async function fetchUpgradeStatus(): Promise<UpgradeStatusResponse> {
-  const response = await fetch(apiUrl("/upgrade/status"), {
+  const response = await apiFetch(apiUrl("/upgrade/status"), {
     method: "GET",
     headers: apiHeaders(),
   });
@@ -1173,7 +1172,7 @@ export async function fetchUpgradeStatus(): Promise<UpgradeStatusResponse> {
 }
 
 export function apiUrl(path: string) {
-  const baseUrl = useAuthStore.getState().serverConfig.url.trim();
+  const baseUrl = getActiveEndpoint(useAuthStore.getState())?.url.trim() ?? "";
   return `${baseUrl.replace(/\/$/, "")}${path}`;
 }
 
@@ -1202,20 +1201,19 @@ function appendQueryRecordFilters(
 }
 
 export function apiHeaders() {
-  const { serverConfig } = useAuthStore.getState();
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (serverConfig.requiresAuth && serverConfig.username) {
-    headers.Authorization = `Basic ${btoa(`${serverConfig.username}:${serverConfig.password}`)}`;
-  }
-  return headers;
+  const endpoint = getActiveEndpoint(useAuthStore.getState());
+  if (!endpoint) throw new Error(tClient(WEBUI.endpoints.none));
+  return endpointHeaders(endpoint);
 }
 
 async function readJsonResponse<T>(response: Response): Promise<T> {
+  assertCurrentResponse(response);
   if (response.status === 401) {
     useAuthStore.getState().logout();
     throw new Error(tClient(WEBUI.storeErrors.loginExpired));
   }
   const text = await response.text();
+  assertCurrentResponse(response);
   const parsed = parseJsonResponseText(text);
   const body = parsed.ok ? parsed.value : undefined;
   if (!response.ok) {
@@ -1309,7 +1307,7 @@ export async function fetchDownloads(
   tag: string,
   signal?: AbortSignal,
 ): Promise<DownloadListResponse> {
-  const response = await fetch(
+  const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/downloads`),
     {
       headers: apiHeaders(),
@@ -1324,7 +1322,7 @@ export async function runDownload(
   tag: string,
   index?: number,
 ): Promise<DownloadResult> {
-  const response = await fetch(
+  const response = await apiFetch(
     apiUrl(`/plugins/${encodeURIComponent(tag)}/download`),
     {
       method: "POST",

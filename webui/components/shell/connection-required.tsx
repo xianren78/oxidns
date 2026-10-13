@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { useAppStore } from "@/lib/store";
-import { useAuthStore } from "@/lib/auth-store";
+import { getActiveEndpoint, useAuthStore } from "@/lib/auth-store";
 import {
   Card,
   CardContent,
@@ -32,7 +32,7 @@ import { useI18n } from "@/lib/i18n/provider";
 
 export function LoginRequired() {
   const { t } = useI18n();
-  const serverConfig = useAuthStore((s) => s.serverConfig);
+  const activeEndpoint = useAuthStore(getActiveEndpoint);
   const connect = useAuthStore((s) => s.connect);
   const isConnecting = useAuthStore((s) => s.isConnecting);
   const connectionError = useAuthStore((s) => s.connectionError);
@@ -41,16 +41,19 @@ export function LoginRequired() {
   const loadConfig = useAppStore((s) => s.loadConfig);
   const setEditorMode = useAppStore((s) => s.setEditorMode);
 
-  const [username, setUsername] = useState(serverConfig.username);
+  const [username, setUsername] = useState(activeEndpoint?.username ?? "");
   const [password, setPassword] = useState("");
 
   const hadCredentials =
-    serverConfig.requiresAuth && serverConfig.username && serverConfig.password;
+    activeEndpoint?.requiresAuth &&
+    activeEndpoint.username &&
+    activeEndpoint.password;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!activeEndpoint) return;
     const ok = await connect({
-      ...serverConfig,
+      ...activeEndpoint,
       requiresAuth: true,
       username,
       password,
@@ -74,7 +77,7 @@ export function LoginRequired() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground font-mono truncate">
-            {serverConfig.url || "/api"}
+            {activeEndpoint?.url || "/api"}
           </div>
           <form onSubmit={handleSubmit} className="space-y-4">
             <Field>
@@ -132,7 +135,9 @@ export function LoginRequired() {
           </form>
           <div className="flex flex-wrap items-center gap-2 border-t pt-4">
             <Button variant="outline" size="sm" asChild>
-              <Link href="/settings">{t(WEBUI.connection.editConnection)}</Link>
+              <Link href="/endpoints">
+                {t(WEBUI.connection.editConnection)}
+              </Link>
             </Button>
             <Button
               variant="ghost"
@@ -181,7 +186,7 @@ export function ConnectionRequired() {
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           <Button asChild>
-            <Link href="/settings">{t(WEBUI.connection.goSettings)}</Link>
+            <Link href="/endpoints">{t(WEBUI.connection.goSettings)}</Link>
           </Button>
           <Button variant="outline" onClick={() => setEditorMode(true)}>
             <FileCode2 className="h-4 w-4 mr-1.5" />
