@@ -107,6 +107,7 @@ import {
   type QueryRecorderTimeseriesResponse,
   type QueryRecorderTopResponse,
 } from "@/lib/oxidns-api";
+import { useAuthStore } from "@/lib/auth-store";
 import { useAppStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import type {
@@ -340,6 +341,7 @@ function QueryRecordsPanelInner({
   onFiltersChange?: (filters: QueryRecordFilters) => void;
 }) {
   const { locale, t } = useI18n();
+  const connectionEpoch = useAuthStore((state) => state.connectionEpoch);
   const [records, setRecords] = useState<QueryRecordRow[]>([]);
   const [nextCursor, setNextCursor] = useState<string | undefined>();
   const [selected, setSelected] = useState<QueryRecordDetail | null>(null);
@@ -375,6 +377,12 @@ function QueryRecordsPanelInner({
   const filtersRef = useRef<QueryRecordFilters>(
     fixedFilters ?? initialFilters ?? {},
   );
+
+  useEffect(() => {
+    abortRef.current?.abort();
+    recordsAbortRef.current?.abort();
+    statsAbortRef.current?.abort();
+  }, [connectionEpoch]);
 
   useEffect(() => {
     filtersRef.current = appliedFilters;

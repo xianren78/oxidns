@@ -337,8 +337,13 @@ function OutboundRuntimeMetricsPanel({
 
 export default function SettingsPage() {
   const { t, formatDateTime } = useI18n();
-  const serverConfig = useAuthStore((s) => s.serverConfig);
-  const setServerConfig = useAuthStore((s) => s.setServerConfig);
+  const serverConfig = useAuthStore(
+    (s) => s.endpoints.find((endpoint) => endpoint.id === s.activeEndpointId)!,
+  );
+  const activeEndpointId = useAuthStore((s) => s.activeEndpointId);
+  const updateEndpoint = useAuthStore((s) => s.updateEndpoint);
+  const setServerConfig = (config: typeof serverConfig) =>
+    updateEndpoint(config.id, config);
   const connect = useAuthStore((s) => s.connect);
   const isConnected = useAuthStore((s) => s.isConnected);
   const isConnecting = useAuthStore((s) => s.isConnecting);
@@ -411,6 +416,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
+      setBackendUrl(serverConfig.url);
       const runtime = asRecord(configModel.runtime);
       const api = asRecord(configModel.api);
       const http = api.http;
@@ -451,7 +457,7 @@ export default function SettingsPage() {
       setSettingsError(null);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [configModel]);
+  }, [activeEndpointId, configModel, serverConfig.url]);
 
   const canConnect = backendUrl.trim().length > 0;
   const outboundProfileNames = outboundProfiles

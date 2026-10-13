@@ -70,12 +70,17 @@ describe("runtime state refresh", () => {
     useAuthStore.setState({
       isConnected: true,
       connectionEpoch,
-      serverConfig: {
-        url: `/api-${connectionEpoch}`,
-        requiresAuth: false,
-        username: "",
-        password: "",
-      },
+      activeEndpointId: "test",
+      endpoints: [
+        {
+          id: "test",
+          name: "Test",
+          url: `/api-${connectionEpoch}`,
+          requiresAuth: false,
+          username: "",
+          password: "",
+        },
+      ],
     });
     useAppStore.setState({
       health: null,
@@ -161,12 +166,17 @@ describe("runtime state refresh", () => {
     connectionEpoch += 1;
     useAuthStore.setState({
       connectionEpoch,
-      serverConfig: {
-        url: "/api-new",
-        requiresAuth: false,
-        username: "",
-        password: "",
-      },
+      activeEndpointId: "test-new",
+      endpoints: [
+        {
+          id: "test-new",
+          name: "New test",
+          url: "/api-new",
+          requiresAuth: false,
+          username: "",
+          password: "",
+        },
+      ],
     });
     const currentRefresh = useAppStore.getState().refreshSystemState();
     await currentRefresh;

@@ -21,7 +21,7 @@ import {
   type ProcessInstanceBaseline,
 } from "./process-instance";
 import { useAppStore } from "./store";
-import { useAuthStore } from "./auth-store";
+import { activeEndpoint } from "./auth-store";
 import {
   isAutomaticUpdateCheckDue,
   updateCheckOptionsFingerprint,
@@ -212,10 +212,7 @@ function createUpdateCheckRequestKey(
   currentVersion: string,
   config: UpgradeConfig,
 ): string {
-  const backend = useAuthStore
-    .getState()
-    .serverConfig.url.trim()
-    .replace(/\/+$/, "");
+  const backend = activeEndpoint().url.trim().replace(/\/+$/, "");
   return updateCheckRequestKey({
     backend,
     currentVersion,
