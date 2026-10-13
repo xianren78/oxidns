@@ -7,6 +7,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { EndpointSwitcher } from "./endpoint-switcher";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import {
   Breadcrumb,
@@ -63,13 +64,14 @@ export function AppHeader({ title, breadcrumbs = [] }: AppHeaderProps) {
   const showNavigation = !editorMode;
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-3 border-b px-4">
+    <header className="flex h-14 shrink-0 items-center gap-2 border-b px-2 sm:gap-3 sm:px-4">
+      <EndpointSwitcher />
       {showNavigation ? (
         <>
           <div className="flex min-w-0 items-center gap-2.5">
             <SidebarTrigger className="rounded-md text-muted-foreground hover:text-foreground" />
           </div>
-          <Breadcrumb className="min-w-0 flex-1">
+          <Breadcrumb className="hidden min-w-0 flex-1 sm:block">
             <BreadcrumbList className="gap-2 text-[13px]">
               <BreadcrumbItem>
                 <BreadcrumbLink asChild className="text-foreground/70">

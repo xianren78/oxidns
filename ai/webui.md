@@ -42,6 +42,27 @@ Paths in this guide are relative to `webui/` unless stated otherwise.
 
 ## Architecture & Extension Principles
 
+- Endpoint connections are owned by `lib/auth-store.ts`: `endpoints` and
+  `activeEndpointId` replace the legacy single connection. Resolve the active
+  endpoint with `getActiveEndpoint`; never temporarily change it to inspect
+  another instance. Keep saved connection migration and password persistence
+  policy compatible with existing installations.
+- Treat `connectionEpoch` as an invalidated session identity. Endpoint changes
+  cancel previous API/SSE requests through `lib/endpoint-session.ts`, clear
+  backend-derived application state, and remount backend pages so local forms
+  and stream subscriptions cannot keep data from the previous instance.
+  Preserve live Query Recorder intent, then reconnect it only after the new
+  configuration resolves the selected plugin.
+- Instance overview probes in `lib/instance-store.ts` operate independently of
+  the active connection. Scope results and cancellation by endpoint ID. A
+  timeout, HTTP error, or authentication challenge for one instance must not
+  disconnect another instance or mark the full overview offline.
+- Keep shared OxiDNS API implementations in `lib/oxidns-api.ts`. Validate the
+  captured session before committing asynchronous results, including response
+  bodies and configuration mutations. Save and request a backend restart with
+  currently accepted credentials before activating rotated credentials.
+
+
 - Keep console-shell ownership centralized in `app/(console)/layout.tsx` and the
   shell components it imports; derive the current component flow from those
   imports instead of preserving a copied chain here.

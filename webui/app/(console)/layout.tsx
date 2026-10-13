@@ -93,12 +93,17 @@ export default function ConsoleLayout({
     isAuthHydrated &&
     !isConnected &&
     (!hasAttemptedAutoConnect || (isConnecting && !connectionError));
+  const isEndpointPage = pathname === "/endpoints" || pathname === "/instances";
   const canUseBackendPages =
-    !isAuthHydrated || isConnected || pathname === "/settings";
+    isConnected || pathname === "/settings" || isEndpointPage;
 
   useEffect(() => {
-    if (isConnected) void loadConfig();
-  }, [isConnected, connectionEpoch, loadConfig]);
+    if (isConnected) {
+      void loadConfig();
+      void useAppStore.getState().refreshRuntimeState();
+      void refreshMetrics();
+    }
+  }, [isConnected, connectionEpoch, loadConfig, refreshMetrics]);
 
   const health = useAppStore((s) => s.health);
   const system = useAppStore((s) => s.system);
@@ -197,7 +202,12 @@ export default function ConsoleLayout({
               )}
             </div>
           ) : canUseBackendPages ? (
-            children
+            <div
+              key={isEndpointPage ? pathname : connectionEpoch}
+              className="contents"
+            >
+              {children}
+            </div>
           ) : isAutoConnectPending ? (
             <>
               <AppHeader title={t(WEBUI.shell.connectBackend)} />
@@ -215,7 +225,7 @@ export default function ConsoleLayout({
             </>
           )}
         </SidebarInset>
-        <PluginDetailSheet />
+        {isConnected && <PluginDetailSheet key={connectionEpoch} />}
         <ConfigHistorySheet open={historyOpen} onOpenChange={setHistoryOpen} />
         <ConfigPatchConfirmationDialog />
         <RestartingOverlay />
