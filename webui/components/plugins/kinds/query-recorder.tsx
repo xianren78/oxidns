@@ -381,7 +381,6 @@ function QueryRecordsPanelInner({
   useEffect(() => {
     abortRef.current?.abort();
     recordsAbortRef.current?.abort();
-    statsAbortRef.current?.abort();
   }, [connectionEpoch]);
 
   useEffect(() => {
