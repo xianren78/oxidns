@@ -25,6 +25,7 @@ import {
   BookOpen,
   GitBranch,
   LayoutDashboard,
+  Network,
   LogOut,
   Puzzle,
   ScrollText,
@@ -41,6 +42,11 @@ const navItems = [
     icon: LayoutDashboard,
   },
   {
+    titleKey: WEBUI.endpoints.instances,
+    href: "/instances",
+    icon: Network,
+  },
+  {
     titleKey: WEBUI.shell.plugins,
     href: "/plugins",
     icon: Puzzle,
@@ -55,13 +61,20 @@ const navItems = [
     href: "/settings",
     icon: Settings,
   },
+  {
+    titleKey: WEBUI.endpoints.manage,
+    href: "/endpoints",
+    icon: Settings,
+  },
 ];
 
 export function AppSidebar() {
   const { t } = useI18n();
   const pathname = usePathname();
   const isConnected = useAuthStore((s) => s.isConnected);
-  const serverConfig = useAuthStore((s) => s.serverConfig);
+  const endpoint = useAuthStore((s) =>
+    s.endpoints.find((item) => item.id === s.activeEndpointId),
+  );
   const logout = useAuthStore((s) => s.logout);
 
   return (
@@ -123,12 +136,12 @@ export function AppSidebar() {
 
       <SidebarFooter className="border-t border-sidebar-border">
         <SidebarMenu>
-          {isConnected && serverConfig.requiresAuth && (
+          {isConnected && endpoint?.requiresAuth && (
             <SidebarMenuItem>
               <div className="flex items-center justify-between gap-1 px-2 py-1">
                 <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
                   <User className="size-3.5 shrink-0" />
-                  <span className="truncate">{serverConfig.username}</span>
+                  <span className="truncate">{endpoint.username}</span>
                 </span>
                 <Tooltip>
                   <TooltipTrigger asChild>

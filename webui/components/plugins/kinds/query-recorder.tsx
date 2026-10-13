@@ -95,6 +95,7 @@ import {
   type QueryRecorderTimeseriesResponse,
   type QueryRecorderTopResponse,
 } from "@/lib/oxidns-api";
+import { useAuthStore } from "@/lib/auth-store";
 import { useAppStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import type {
@@ -228,6 +229,7 @@ function QueryRecordsPanel({ tag }: { tag: string }) {
 
 function QueryRecordsPanelInner({ tag }: { tag: string }) {
   const { locale, t } = useI18n();
+  const connectionEpoch = useAuthStore((state) => state.connectionEpoch);
   const [records, setRecords] = useState<QueryRecordRow[]>([]);
   const [nextCursor, setNextCursor] = useState<string | undefined>();
   const [matcherStats, setMatcherStats] = useState<
@@ -252,8 +254,14 @@ function QueryRecordsPanelInner({ tag }: { tag: string }) {
   // matcher-click). Without this each click piles a new SQL query onto the
   // blocking pool while the previous one is still running.
   const recordsAbortRef = useRef<AbortController | null>(null);
-  const statsAbortRef = useRef<AbortController | null>(null);
+  const matcherStatsAbortRef = useRef<AbortController | null>(null);
   const filtersRef = useRef<QueryRecordFilters>({});
+
+  useEffect(() => {
+    abortRef.current?.abort();
+    recordsAbortRef.current?.abort();
+    matcherStatsAbortRef.current?.abort();
+  }, [connectionEpoch]);
 
   useEffect(() => {
     filtersRef.current = appliedFilters;
@@ -297,9 +305,9 @@ function QueryRecordsPanelInner({ tag }: { tag: string }) {
 
   const loadMatcherStats = useCallback(
     async (filters: QueryRecordFilters) => {
-      statsAbortRef.current?.abort();
+      matcherStatsAbortRef.current?.abort();
       const controller = new AbortController();
-      statsAbortRef.current = controller;
+      matcherStatsAbortRef.current = controller;
       setStatsLoading(true);
       setStatsError(null);
       try {
@@ -320,8 +328,8 @@ function QueryRecordsPanelInner({ tag }: { tag: string }) {
             : t(WEBUI.queryRecorder.readMatcherStatsFailed),
         );
       } finally {
-        if (statsAbortRef.current === controller) {
-          statsAbortRef.current = null;
+        if (matcherStatsAbortRef.current === controller) {
+          matcherStatsAbortRef.current = null;
           setStatsLoading(false);
         }
       }
@@ -348,7 +356,7 @@ function QueryRecordsPanelInner({ tag }: { tag: string }) {
       window.clearTimeout(timer);
       abortRef.current?.abort();
       recordsAbortRef.current?.abort();
-      statsAbortRef.current?.abort();
+      matcherStatsAbortRef.current?.abort();
     };
   }, [loadMatcherStats, loadRecords]);
 
@@ -380,7 +388,7 @@ function QueryRecordsPanelInner({ tag }: { tag: string }) {
 
   const handleClearHistory = async () => {
     recordsAbortRef.current?.abort();
-    statsAbortRef.current?.abort();
+    matcherStatsAbortRef.current?.abort();
     setClearing(true);
     setError(null);
     setStatsError(null);
