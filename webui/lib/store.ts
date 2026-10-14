@@ -73,6 +73,10 @@ import {
 } from "./config-history";
 import { WEBUI, tClient } from "./i18n";
 import { getActiveEndpoint, useAuthStore } from "./auth-store";
+import {
+  loadDashboardPreferences,
+  savePinnedPluginIds,
+} from "./dashboard-preferences";
 import { probeEndpoint, type Endpoint } from "./endpoints";
 import {
   isReservedPluginTag,
@@ -1009,10 +1013,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   togglePluginPin: (id) =>
     set((state) => {
+      if (!state.plugins.some((plugin) => plugin.id === id)) return {};
       const plugins = state.plugins.map((p) =>
         p.id === id ? { ...p, pinned: !p.pinned } : p,
       );
-      savePinnedIds(new Set(plugins.filter((p) => p.pinned).map((p) => p.id)));
+      savePinnedPluginIds(
+        useAuthStore.getState().activeEndpointId,
+        plugins.filter((p) => p.pinned).map((p) => p.id),
+      );
       return {
         plugins,
         selectedPlugin: syncSelectedPlugin(state.selectedPlugin, plugins),
@@ -1659,27 +1667,15 @@ function syncSelectedPlugin(
   return plugins.find((plugin) => plugin.id === selectedPlugin.id) ?? null;
 }
 
-const PINNED_PLUGINS_KEY = "oxidns:pinned-plugins";
-
-function loadPinnedIds(): Set<string> {
-  try {
-    const stored = localStorage.getItem(PINNED_PLUGINS_KEY);
-    return stored ? new Set(JSON.parse(stored) as string[]) : new Set();
-  } catch {
-    return new Set();
-  }
-}
-
-function savePinnedIds(ids: Set<string>): void {
-  try {
-    localStorage.setItem(PINNED_PLUGINS_KEY, JSON.stringify([...ids]));
-  } catch {}
-}
-
 function restorePinnedState(plugins: PluginInstance[]): PluginInstance[] {
-  const pinnedIds = loadPinnedIds();
-  if (pinnedIds.size === 0) return plugins;
-  return plugins.map((p) => ({ ...p, pinned: pinnedIds.has(p.id) }));
+  const { pinnedPluginIds } = loadDashboardPreferences(
+    useAuthStore.getState().activeEndpointId,
+  );
+  const pinnedIds = new Set(pinnedPluginIds);
+  return plugins.map((plugin) => ({
+    ...plugin,
+    pinned: pinnedIds.has(plugin.id),
+  }));
 }
 
 function pluginCountOf(text: string): number {

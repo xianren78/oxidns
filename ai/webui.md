@@ -57,6 +57,9 @@ Paths in this guide are relative to `webui/` unless stated otherwise.
   the active connection. Scope results and cancellation by endpoint ID. A
   timeout, HTTP error, or authentication challenge for one instance must not
   disconnect another instance or mark the full overview offline.
+- Keep dashboard pins and card order endpoint-scoped in
+  `lib/dashboard-preferences.ts`, keyed by stable endpoint ID rather than URL or
+  name. Migrate legacy global preferences to one endpoint only.
 - Keep shared OxiDNS API implementations in `lib/oxidns-api.ts`. Validate the
   captured session before committing asynchronous results, including response
   bodies and configuration mutations. Save and request a backend restart with

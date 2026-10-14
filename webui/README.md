@@ -20,7 +20,9 @@ before a switch; active save, reload, restart and upgrade operations block it.
 **Instances** checks all endpoints independently, even if the active connection
 is offline. Each card shows its own status, version, uptime, plugin count and
 response time. An authentication failure or offline instance does not affect
-other cards or the active connection.
+other cards or the active connection. Dashboard pins and card order are saved
+independently by endpoint ID, and survive endpoint name or URL edits. Legacy
+global dashboard preferences migrate only to the first endpoint that loads them.
 
 Connections live in this browser's `oxidns-auth` storage entry. Legacy single
 server settings migrate automatically. **Remember endpoint passwords** controls
