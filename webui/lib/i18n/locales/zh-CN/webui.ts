@@ -9,7 +9,8 @@ export const zhCNWebui = {
     overview: "实例概览",
     manage: "端点管理",
     description: "管理各个 OxiDNS 实例的连接。",
-    overviewDescription: "独立检查每个实例，即使当前端点离线也不影响其他实例。",
+    overviewDescription:
+      "管理和监控各个实例，独立检查连接状态，当前端点离线也不影响其他实例。",
     add: "添加端点",
     edit: "编辑端点",
     name: "名称",

@@ -42,6 +42,9 @@ Paths in this guide are relative to `webui/` unless stated otherwise.
 
 ## Architecture & Extension Principles
 
+- Instance monitoring and connection management share `/instances`; keep add,
+  edit, delete, connection testing and password preferences on that page. The
+  legacy `/endpoints` route redirects there for existing bookmarks.
 - Endpoint connections are owned by `lib/auth-store.ts`: `endpoints` and
   `activeEndpointId` replace the legacy single connection. Resolve the active
   endpoint with `getActiveEndpoint`; never temporarily change it to inspect

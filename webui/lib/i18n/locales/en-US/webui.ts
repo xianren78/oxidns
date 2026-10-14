@@ -14,7 +14,7 @@ export const enUSWebui = {
     manage: "Endpoints",
     description: "Manage connections to your OxiDNS instances.",
     overviewDescription:
-      "Each instance is checked independently, including when the active endpoint is offline.",
+      "Manage and monitor each instance independently, even when the active endpoint is offline.",
     add: "Add endpoint",
     edit: "Edit endpoint",
     name: "Name",
