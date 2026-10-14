@@ -5,8 +5,8 @@ APIs. The React/Next.js stack and DNS backend are unchanged. The compact instanc
 cards and connection switcher take UX inspiration from Zashboard; its source is
 not copied into this project.
 
-Use **Endpoints** to add, edit, test, or delete connections. Give each endpoint a
-name and API URL, for example `https://dns.example.com/api` or a same-origin
+Use **Instances** to monitor, add, edit, test, or delete connections. Give each
+endpoint a name and API URL, for example `https://dns.example.com/api` or a same-origin
 reverse-proxy path such as `/router/api`. A bare HTTP(S) host URL adds `/api`.
 Configure Basic authentication per endpoint when required. The existing OxiDNS
 CORS settings must permit the dashboard's origin for cross-origin connections.
@@ -17,8 +17,8 @@ system and metrics, and reconnects visible Logs or a live Query Recorder. The
 plugin detail sheet also has a switcher. Unsaved configuration edits prompt
 before a switch; active save, reload, restart and upgrade operations block it.
 
-**Instances** checks all endpoints independently, even if the active connection
-is offline. Each card shows its own status, version, uptime, plugin count and
+The same **Instances** page checks all endpoints independently, even if the
+active connection is offline. Each card shows its own status, version, uptime, plugin count and
 response time. An authentication failure or offline instance does not affect
 other cards or the active connection. Dashboard pins and card order are saved
 independently by endpoint ID, and survive endpoint name or URL edits. Legacy

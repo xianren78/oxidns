@@ -135,7 +135,7 @@ export function LoginRequired() {
           </form>
           <div className="flex flex-wrap items-center gap-2 border-t pt-4">
             <Button variant="outline" size="sm" asChild>
-              <Link href="/endpoints">
+              <Link href="/instances">
                 {t(WEBUI.connection.editConnection)}
               </Link>
             </Button>
@@ -186,7 +186,7 @@ export function ConnectionRequired() {
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           <Button asChild>
-            <Link href="/endpoints">{t(WEBUI.connection.goSettings)}</Link>
+            <Link href="/instances">{t(WEBUI.endpoints.overview)}</Link>
           </Button>
           <Button variant="outline" onClick={() => setEditorMode(true)}>
             <FileCode2 className="h-4 w-4 mr-1.5" />

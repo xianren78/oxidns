@@ -35,15 +35,12 @@ import {
   ScrollText,
   Settings,
   Server,
-  Network,
   User,
 } from "lucide-react";
 import { WEBUI } from "@/lib/i18n";
 import { useI18n } from "@/lib/i18n/provider";
 
 const navItems = [
-  { titleKey: WEBUI.endpoints.overview, href: "/instances", icon: Server },
-  { titleKey: WEBUI.endpoints.manage, href: "/endpoints", icon: Network },
   {
     titleKey: WEBUI.shell.dashboard,
     href: "/",
@@ -54,6 +51,7 @@ const navItems = [
     href: "/plugins",
     icon: Puzzle,
   },
+  { titleKey: WEBUI.endpoints.overview, href: "/instances", icon: Server },
   {
     titleKey: WEBUI.shell.logs,
     href: "/logs",
