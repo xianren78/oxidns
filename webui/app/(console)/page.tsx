@@ -10,6 +10,10 @@ import { AppHeader } from "@/components/shell/app-header";
 import { SystemMetrics } from "@/components/dashboard/system-metrics";
 import { SortablePluginGrid } from "@/components/plugins/sortable-plugin-grid";
 import { useAppStore } from "@/lib/store";
+import {
+  loadDashboardPreferences,
+  saveDashboardOrder,
+} from "@/lib/dashboard-preferences";
 import type { PluginInstance } from "@/lib/types";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -23,26 +27,7 @@ import {
   DASHBOARD_SYSTEM_POLL_INTERVAL_MS,
 } from "@/lib/polling-policy";
 
-// Dashboard card order is a frontend-only preference: it lives in
-// localStorage and never touches the config file (unlike the plugin center,
-// where reordering rewrites the YAML order).
-const DASHBOARD_ORDER_KEY = "oxidns:dashboard-order";
-
-function loadDashboardOrder(): string[] {
-  try {
-    const stored = localStorage.getItem(DASHBOARD_ORDER_KEY);
-    return stored ? (JSON.parse(stored) as string[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveDashboardOrder(ids: string[]): void {
-  try {
-    localStorage.setItem(DASHBOARD_ORDER_KEY, JSON.stringify(ids));
-  } catch {}
-}
-
+// Dashboard order is an endpoint-scoped frontend preference, independent of YAML.
 // Sort pinned plugins by the saved order; anything not yet ranked (newly
 // pinned) keeps its natural order at the end.
 function applyOrder(
@@ -58,6 +43,16 @@ function applyOrder(
 }
 
 export default function DashboardPage() {
+  const endpointId = useAuthStore((state) => state.activeEndpointId);
+  return (
+    <EndpointDashboard
+      key={endpointId ?? "no-endpoint"}
+      endpointId={endpointId}
+    />
+  );
+}
+
+function EndpointDashboard({ endpointId }: { endpointId: string | null }) {
   const { t } = useI18n();
   const plugins = useAppStore((s) => s.plugins);
   const refreshHealthState = useAppStore((s) => s.refreshHealthState);
@@ -69,7 +64,9 @@ export default function DashboardPage() {
   // mount), so applying a different order here cannot cause a hydration
   // mismatch.
   const [order, setOrder] = useState<string[]>(() =>
-    typeof window === "undefined" ? [] : loadDashboardOrder(),
+    typeof window === "undefined"
+      ? []
+      : loadDashboardPreferences(endpointId).order,
   );
 
   useVisiblePolling(
@@ -96,7 +93,7 @@ export default function DashboardPage() {
 
   const handleReorder = (ids: string[]) => {
     setOrder(ids);
-    saveDashboardOrder(ids);
+    saveDashboardOrder(endpointId, ids);
   };
 
   return (
