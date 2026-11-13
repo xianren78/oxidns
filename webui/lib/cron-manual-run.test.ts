@@ -109,7 +109,11 @@ describe("cron manual run", () => {
 
   it("encodes plugin and job names and returns the accepted response", async () => {
     useAuthStore.setState((state) => ({
-      serverConfig: { ...state.serverConfig, url: "/api" },
+      endpoints: state.endpoints.map((endpoint) =>
+        endpoint.id === state.activeEndpointId
+          ? { ...endpoint, url: "/api" }
+          : endpoint,
+      ),
     }));
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse(202, {
@@ -184,8 +188,14 @@ describe("cron manual run", () => {
     ).resolves.toMatchObject({ ok: true });
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/plugins/cron%20main/jobs/status",
-      expect.objectContaining({ method: "GET", signal: controller.signal }),
+      expect.objectContaining({
+        method: "GET",
+        signal: expect.any(AbortSignal),
+      }),
     );
+    const requestSignal = fetchMock.mock.calls[0][1].signal as AbortSignal;
+    controller.abort();
+    expect(requestSignal.aborted).toBe(true);
   });
 
   it("keeps loading until the accepted run reaches a real terminal result", () => {
@@ -297,11 +307,9 @@ describe("cron manual run", () => {
 
   it("does not infer completion from a terminal-only snapshot after start failure", () => {
     const rejected = rejectCronManualRun(beginCronManualRun(undefined));
-    const completed = reconcileCronManualRunViews(
-      { job: rejected },
-      ["job"],
-      { job: completedSnapshot(4, "completed") },
-    );
+    const completed = reconcileCronManualRunViews({ job: rejected }, ["job"], {
+      job: completedSnapshot(4, "completed"),
+    });
 
     expect(cronRunButtonPhase(completed.views.job)).toBe("idle");
     expect(completed.effects).toEqual([]);
@@ -321,9 +329,9 @@ describe("cron manual run", () => {
       [jobName],
       snapshots,
     );
-    expect(
-      Object.prototype.hasOwnProperty.call(completed.views, jobName),
-    ).toBe(true);
+    expect(Object.prototype.hasOwnProperty.call(completed.views, jobName)).toBe(
+      true,
+    );
     expect(Object.keys(completed.views)).toEqual([jobName]);
     expect(cronRunButtonPhase(completed.views[jobName])).toBe("success");
 
@@ -386,11 +394,9 @@ describe("cron manual run", () => {
     expect(failedViews.kept.success).toBe("queued");
     expect(hasCronManualRunLocalState(failedViews.kept)).toBe(true);
 
-    const recovered = reconcileCronManualRunViews(
-      failedViews,
-      ["kept"],
-      { kept: scheduledWhileCompleted },
-    );
+    const recovered = reconcileCronManualRunViews(failedViews, ["kept"], {
+      kept: scheduledWhileCompleted,
+    });
     expect(recovered.views.kept.success).toBe("queued");
     expect(cronRunButtonPhase(recovered.views.kept)).toBe("running");
 

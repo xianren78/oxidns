@@ -58,7 +58,7 @@ describe("cache management", () => {
   });
   it("passes filter and cursor together and forwards cancellation", async () => {
     useAuthStore.setState((state) => ({
-      serverConfig: { ...state.serverConfig, url: "/api" },
+      endpoints: state.endpoints.map((endpoint) => ({ ...endpoint, url: "/api" })),
     }));
     const fetchMock = vi
       .fn()
@@ -68,7 +68,8 @@ describe("cache management", () => {
         ),
       );
     vi.stubGlobal("fetch", fetchMock);
-    const signal = new AbortController().signal;
+    const controller = new AbortController();
+    const signal = controller.signal;
     await fetchCacheEntries("cache main", {
       qname: "example",
       answer_ip: "2001:db8::1",
@@ -80,7 +81,9 @@ describe("cache management", () => {
     expect(parsed.pathname).toBe("/api/plugins/cache%20main/entries");
     expect(parsed.searchParams.get("answer_ip")).toBe("2001:db8::1");
     expect(parsed.searchParams.get("cursor")).toBe("100");
-    expect(options.signal).toBe(signal);
+    expect(options.signal.aborted).toBe(false);
+    controller.abort();
+    expect(options.signal.aborted).toBe(true);
   });
   it("sends explicit selection and reports rejection rather than success", async () => {
     const fetchMock = vi

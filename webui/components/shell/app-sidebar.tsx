@@ -25,7 +25,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useAuthStore } from "@/lib/auth-store";
+import { getActiveEndpoint, useAuthStore } from "@/lib/auth-store";
 import {
   BookOpen,
   GitBranch,
@@ -34,6 +34,7 @@ import {
   Puzzle,
   ScrollText,
   Settings,
+  Server,
   User,
 } from "lucide-react";
 import { WEBUI } from "@/lib/i18n";
@@ -50,6 +51,7 @@ const navItems = [
     href: "/plugins",
     icon: Puzzle,
   },
+  { titleKey: WEBUI.endpoints.overview, href: "/instances", icon: Server },
   {
     titleKey: WEBUI.shell.logs,
     href: "/logs",
@@ -66,7 +68,7 @@ export function AppSidebar() {
   const { t } = useI18n();
   const pathname = usePathname();
   const isConnected = useAuthStore((s) => s.isConnected);
-  const serverConfig = useAuthStore((s) => s.serverConfig);
+  const activeEndpoint = useAuthStore(getActiveEndpoint);
   const logout = useAuthStore((s) => s.logout);
 
   return (
@@ -128,12 +130,12 @@ export function AppSidebar() {
 
       <SidebarFooter className="border-t border-sidebar-border">
         <SidebarMenu>
-          {isConnected && serverConfig.requiresAuth && (
+          {isConnected && activeEndpoint?.requiresAuth && (
             <SidebarMenuItem>
               <div className="flex items-center justify-between gap-1 px-2 py-1">
                 <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
                   <User className="size-3.5 shrink-0" />
-                  <span className="truncate">{serverConfig.username}</span>
+                  <span className="truncate">{activeEndpoint.username}</span>
                 </span>
                 <Tooltip>
                   <TooltipTrigger asChild>
