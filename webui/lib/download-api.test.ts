@@ -21,12 +21,19 @@ describe("manual download API", () => {
       ],
     };
     fetchMock.mockResolvedValue(new Response(JSON.stringify(payload)));
-    const signal = new AbortController().signal;
+    const controller = new AbortController();
+    const signal = controller.signal;
     expect(await fetchDownloads("rules download", signal)).toEqual(payload);
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/plugins/rules%20download/downloads",
-      expect.objectContaining({ cache: "no-store", signal }),
+      expect.objectContaining({
+        cache: "no-store",
+        signal: expect.any(AbortSignal),
+      }),
     );
+    const requestSignal = fetchMock.mock.calls[0][1].signal as AbortSignal;
+    controller.abort();
+    expect(requestSignal.aborted).toBe(true);
   });
 
   it("preserves index zero when downloading the first item", async () => {
@@ -54,7 +61,9 @@ describe("manual download API", () => {
 
   it("rejects busy and server errors", async () => {
     fetchMock.mockResolvedValueOnce(new Response("{}", { status: 409 }));
-    await expect(runDownload("rules")).rejects.toBeInstanceOf(DownloadBusyError);
+    await expect(runDownload("rules")).rejects.toBeInstanceOf(
+      DownloadBusyError,
+    );
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ message: "missing plugin" }), {
         status: 404,

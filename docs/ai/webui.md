@@ -42,6 +42,10 @@ Paths in this guide are relative to `webui/` unless stated otherwise.
 
 ## Architecture & Extension Principles
 
+- Manage connections and independently probe instances on `/instances`, below Dashboard and Plugin Center. `/endpoints` redirects there.
+- Resolve connections through `getActiveEndpoint`; endpoint switches invalidate API/SSE sessions and reload backend state.
+- Persist dashboard pins and ordering by endpoint ID in `dashboard-preferences.ts`.
+
 - Keep console-shell ownership centralized in `app/(console)/layout.tsx` and the
   shell components it imports; derive the current component flow from those
   imports instead of preserving a copied chain here.

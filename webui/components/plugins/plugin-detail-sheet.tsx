@@ -7,6 +7,7 @@
 
 import { useState } from "react";
 import { Maximize2, Minimize2, X } from "lucide-react";
+import { EndpointSwitcher } from "@/components/shell/endpoint-switcher";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetClose, SheetContent } from "@/components/ui/sheet";
 import {
@@ -31,11 +32,17 @@ const generateChartData = (): PluginMetricPoint[] =>
 
 export function PluginDetailSheet() {
   const { t } = useI18n();
-  const { selectedPlugin, detailOpen, setDetailOpen } = useAppStore();
+  const {
+    selectedPlugin,
+    detailOpen,
+    setDetailOpen,
+    configVersion,
+    isConfigLoading,
+  } = useAppStore();
   const [chartData] = useState(generateChartData);
   const [expandedPluginId, setExpandedPluginId] = useState<string | null>(null);
 
-  if (!selectedPlugin) return null;
+  if (!selectedPlugin || !configVersion || isConfigLoading) return null;
 
   const expanded = expandedPluginId === selectedPlugin.id;
 
@@ -67,6 +74,7 @@ export function PluginDetailSheet() {
         }}
       >
         <div className="absolute right-3 top-3 z-20 flex items-center gap-1">
+          <EndpointSwitcher />
           <Tooltip>
             <TooltipTrigger asChild>
               <Button

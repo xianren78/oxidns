@@ -8,192 +8,256 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { WEBUI, tClient } from "./i18n";
-
-export interface ServerConfig {
-  url: string;
-  requiresAuth: boolean;
-  username: string;
-  password: string;
-}
+import {
+  DEFAULT_ENDPOINT,
+  EndpointAuthError,
+  normalizeEndpoint,
+  probeEndpoint,
+  type Endpoint,
+  type EndpointDraft,
+} from "./endpoints";
 
 export interface AuthState {
-  serverConfig: ServerConfig;
+  endpoints: Endpoint[];
+  activeEndpointId: string | null;
   isAuthenticated: boolean;
   isConnected: boolean;
   isConnecting: boolean;
   isHydrated: boolean;
-  /** Increments after every successful backend connection. */
+  /** Changes when the active session is invalidated, before any probe starts. */
   connectionEpoch: number;
   hasAttemptedAutoConnect: boolean;
   connectionError: string | null;
   needsCredentials: boolean;
   rememberLogin: boolean;
-
-  setServerConfig: (config: ServerConfig) => void;
-  connect: (config?: ServerConfig) => Promise<boolean>;
+  addEndpoint: (draft: EndpointDraft) => Endpoint;
+  updateEndpoint: (id: string, draft: EndpointDraft) => void;
+  removeEndpoint: (id: string) => Promise<void>;
+  switchEndpoint: (id: string) => Promise<boolean>;
+  connect: (endpoint?: Endpoint) => Promise<boolean>;
   attemptAutoConnect: () => Promise<void>;
   markHydrated: () => void;
   setRememberLogin: (remember: boolean) => void;
   logout: () => void;
 }
 
+export function getActiveEndpoint(
+  state: Pick<AuthState, "endpoints" | "activeEndpointId">,
+): Endpoint | null {
+  return (
+    state.endpoints.find(
+      (endpoint) => endpoint.id === state.activeEndpointId,
+    ) ?? null
+  );
+}
+
+let connectionController: AbortController | null = null;
+const disconnected = {
+  isAuthenticated: false,
+  isConnected: false,
+  isConnecting: false,
+  connectionError: null,
+  needsCredentials: false,
+};
+
+export function migrateEndpoints(
+  persisted: unknown,
+): Pick<AuthState, "endpoints" | "activeEndpointId" | "rememberLogin"> {
+  const state = (persisted ?? {}) as Partial<AuthState> & {
+    serverConfig?: Partial<EndpointDraft>;
+  };
+  const rememberLogin = state.rememberLogin ?? true;
+  const endpoints = Array.isArray(state.endpoints)
+    ? state.endpoints
+    : [
+        {
+          ...DEFAULT_ENDPOINT,
+          ...state.serverConfig,
+          id: DEFAULT_ENDPOINT.id,
+          name: DEFAULT_ENDPOINT.name,
+        },
+      ];
+  return {
+    endpoints: endpoints.map((endpoint) => ({
+      ...endpoint,
+      password: rememberLogin ? endpoint.password : "",
+    })),
+    activeEndpointId: endpoints.some(
+      (endpoint) => endpoint.id === state.activeEndpointId,
+    )
+      ? (state.activeEndpointId ?? null)
+      : (endpoints[0]?.id ?? null),
+    rememberLogin,
+  };
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
-      serverConfig: {
-        url: "/api",
-        requiresAuth: false,
-        username: "",
-        password: "",
-      },
-      isAuthenticated: false,
-      isConnected: false,
-      isConnecting: false,
+      endpoints: [{ ...DEFAULT_ENDPOINT }],
+      activeEndpointId: DEFAULT_ENDPOINT.id,
+      ...disconnected,
       isHydrated: false,
       connectionEpoch: 0,
       hasAttemptedAutoConnect: false,
-      connectionError: null,
-      needsCredentials: false,
       rememberLogin: true,
 
-      setServerConfig: (config) =>
+      addEndpoint: (draft) => {
+        const endpoint = {
+          ...normalizeEndpoint(draft),
+          id: crypto.randomUUID(),
+        };
+        set((state) => ({ endpoints: [...state.endpoints, endpoint] }));
+        if (!get().activeEndpointId) void get().switchEndpoint(endpoint.id);
+        return endpoint;
+      },
+      updateEndpoint: (id, draft) => {
+        const current = get().endpoints.find((endpoint) => endpoint.id === id);
+        if (!current) return;
+        const endpoint = { ...normalizeEndpoint(draft), id };
+        const changed =
+          current.url !== endpoint.url ||
+          current.requiresAuth !== endpoint.requiresAuth ||
+          current.username !== endpoint.username ||
+          current.password !== endpoint.password;
         set((state) => ({
-          serverConfig: config,
-          ...(isSameServerConfig(state.serverConfig, config)
-            ? {}
-            : {
-                isAuthenticated: false,
-                isConnected: false,
-                connectionError: null,
-                needsCredentials: false,
-              }),
-        })),
-
+          endpoints: state.endpoints.map((item) =>
+            item.id === id ? endpoint : item,
+          ),
+        }));
+        if (changed && get().activeEndpointId === id) {
+          connectionController?.abort();
+          set((state) => ({
+            ...disconnected,
+            connectionEpoch: state.connectionEpoch + 1,
+          }));
+        }
+      },
+      removeEndpoint: async (id) => {
+        const wasActive = get().activeEndpointId === id;
+        set((state) => ({
+          endpoints: state.endpoints.filter((endpoint) => endpoint.id !== id),
+        }));
+        if (wasActive) {
+          const next = get().endpoints[0];
+          if (next) await get().switchEndpoint(next.id);
+          else {
+            connectionController?.abort();
+            set((state) => ({
+              ...disconnected,
+              activeEndpointId: null,
+              connectionEpoch: state.connectionEpoch + 1,
+            }));
+          }
+        }
+      },
+      switchEndpoint: async (id) => {
+        if (!get().endpoints.some((endpoint) => endpoint.id === id))
+          return false;
+        return get().connect(
+          get().endpoints.find((endpoint) => endpoint.id === id),
+        );
+      },
       setRememberLogin: (remember) => set({ rememberLogin: remember }),
-
-      logout: () =>
+      logout: () => {
+        connectionController?.abort();
         set((state) => ({
-          isConnected: false,
-          isAuthenticated: false,
+          ...disconnected,
           needsCredentials: true,
-          connectionError: null,
-          serverConfig: {
-            ...state.serverConfig,
-            username: "",
-            password: "",
-          },
-        })),
-
-      connect: async (config?: ServerConfig) => {
-        set({ isConnecting: true, connectionError: null });
-
-        const serverConfig = config ?? get().serverConfig;
-
+          connectionEpoch: state.connectionEpoch + 1,
+          endpoints: state.endpoints.map((endpoint) =>
+            endpoint.id === state.activeEndpointId
+              ? { ...endpoint, password: "" }
+              : endpoint,
+          ),
+        }));
+      },
+      connect: async (config) => {
+        const candidate = config ?? getActiveEndpoint(get());
+        if (!candidate) return false;
+        let endpoint: Endpoint;
         try {
-          const url = serverConfig.url.trim();
-          if (!url) {
-            throw new Error(tClient(WEBUI.storeErrors.serviceUrlRequired));
-          }
-          const headers: Record<string, string> = {
-            Accept: "application/json",
-          };
-          if (serverConfig.requiresAuth) {
-            if (!serverConfig.username || !serverConfig.password) {
-              // Credentials known to be incomplete (e.g. rememberLogin=false cleared
-              // the password). Skip the network round-trip and show the login form.
-              set({
-                isConnecting: false,
-                needsCredentials: true,
-                connectionError: null,
-              });
-              return false;
-            }
-            headers.Authorization = `Basic ${btoa(`${serverConfig.username}:${serverConfig.password}`)}`;
-          }
-          const response = await fetch(`${url.replace(/\/$/, "")}/health`, {
-            method: "GET",
-            headers,
+          endpoint = { ...normalizeEndpoint(candidate), id: candidate.id };
+        } catch (error) {
+          set({
+            connectionError:
+              error instanceof Error ? error.message : String(error),
+            isConnecting: false,
           });
-          if (response.status === 401) {
-            set({
-              isConnected: false,
-              isAuthenticated: false,
-              isConnecting: false,
-              needsCredentials: true,
-              connectionError:
-                serverConfig.requiresAuth &&
-                serverConfig.username &&
-                serverConfig.password
-                  ? tClient(WEBUI.storeErrors.invalidCredentials)
-                  : null,
-              serverConfig: { ...serverConfig, requiresAuth: true },
-            });
+          return false;
+        }
+        connectionController?.abort();
+        const controller = new AbortController();
+        connectionController = controller;
+        set((state) => ({
+          ...disconnected,
+          isConnecting: true,
+          hasAttemptedAutoConnect: true,
+          activeEndpointId: endpoint.id,
+          endpoints: state.endpoints.map((item) =>
+            item.id === endpoint.id ? endpoint : item,
+          ),
+          connectionEpoch: state.connectionEpoch + 1,
+        }));
+        const epoch = get().connectionEpoch;
+        const isCurrent = () =>
+          !controller.signal.aborted && get().connectionEpoch === epoch;
+        try {
+          if (
+            endpoint.requiresAuth &&
+            (!endpoint.username || !endpoint.password)
+          ) {
+            set({ isConnecting: false, needsCredentials: true });
             return false;
           }
-          if (!response.ok) {
-            throw new Error(
-              tClient(WEBUI.storeErrors.connectionHttpFailed, {
-                status: response.status,
-              }),
-            );
-          }
-          set((state) => ({
-            serverConfig,
+          await probeEndpoint(endpoint, controller.signal);
+          if (!isCurrent()) return false;
+          set({
             isConnected: true,
             isAuthenticated: true,
             isConnecting: false,
-            needsCredentials: false,
-            connectionEpoch: state.connectionEpoch + 1,
-          }));
+          });
           return true;
         } catch (error) {
-          set({
-            isConnected: false,
-            isAuthenticated: false,
-            isConnecting: false,
-            needsCredentials: false,
+          if (!isCurrent()) return false;
+          const needsCredentials = error instanceof EndpointAuthError;
+          set((state) => ({
+            ...disconnected,
+            needsCredentials,
             connectionError:
               error instanceof Error
                 ? error.message
                 : tClient(WEBUI.storeErrors.connectionFailed),
-          });
+            endpoints: needsCredentials
+              ? state.endpoints.map((item) =>
+                  item.id === endpoint.id
+                    ? { ...item, requiresAuth: true }
+                    : item,
+                )
+              : state.endpoints,
+          }));
           return false;
         }
       },
-
       attemptAutoConnect: async () => {
         if (get().hasAttemptedAutoConnect) return;
         set({ hasAttemptedAutoConnect: true });
-        if (get().isConnecting) return;
-        await get().connect();
+        if (!get().isConnecting) await get().connect();
       },
-
       markHydrated: () => set({ isHydrated: true }),
     }),
     {
       name: "oxidns-auth",
-      // Don't persist live connection flags: every page load should
-      // re-verify the backend before assuming we're online.
-      // When rememberLogin is false, strip the password so the next
-      // visit forces the user to re-enter it (username is kept for pre-fill).
+      version: 1,
+      migrate: migrateEndpoints,
       partialize: (state) => ({
         rememberLogin: state.rememberLogin,
-        serverConfig: state.rememberLogin
-          ? state.serverConfig
-          : { ...state.serverConfig, password: "" },
+        activeEndpointId: state.activeEndpointId,
+        endpoints: state.endpoints.map((endpoint) =>
+          state.rememberLogin ? endpoint : { ...endpoint, password: "" },
+        ),
       }),
-      onRehydrateStorage: () => (state) => {
-        state?.markHydrated();
-      },
+      onRehydrateStorage: () => (state) => state?.markHydrated(),
     },
   ),
 );
-
-function isSameServerConfig(left: ServerConfig, right: ServerConfig) {
-  return (
-    left.url === right.url &&
-    left.requiresAuth === right.requiresAuth &&
-    left.username === right.username &&
-    left.password === right.password
-  );
-}

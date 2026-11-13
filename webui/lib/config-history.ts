@@ -13,7 +13,7 @@
 // are lossy (comments / key order), so anything we want to faithfully restore
 // must keep the original text rather than a re-serialized model.
 
-import { useAuthStore } from "./auth-store";
+import { getActiveEndpoint, useAuthStore } from "./auth-store";
 
 export type ApplyStatus =
   | "not-applied"
@@ -48,7 +48,7 @@ const MAX_ENTRIES = 30;
 export function getScopeKey(configPath: string): string {
   let serverUrl = "";
   try {
-    serverUrl = useAuthStore.getState().serverConfig.url.trim();
+    serverUrl = getActiveEndpoint(useAuthStore.getState())?.url.trim() ?? "";
   } catch {
     serverUrl = "";
   }

@@ -21,7 +21,7 @@ import {
   type ProcessInstanceBaseline,
 } from "./process-instance";
 import { useAppStore } from "./store";
-import { useAuthStore } from "./auth-store";
+import { getActiveEndpoint, useAuthStore } from "./auth-store";
 import {
   isAutomaticUpdateCheckDue,
   updateCheckOptionsFingerprint,
@@ -212,10 +212,8 @@ function createUpdateCheckRequestKey(
   currentVersion: string,
   config: UpgradeConfig,
 ): string {
-  const backend = useAuthStore
-    .getState()
-    .serverConfig.url.trim()
-    .replace(/\/+$/, "");
+  const auth = useAuthStore.getState();
+  const backend = `${auth.activeEndpointId}|${getActiveEndpoint(auth)?.url.trim().replace(/\/+$/, "") ?? ""}`;
   return updateCheckRequestKey({
     backend,
     currentVersion,
@@ -255,6 +253,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
 
   checkForUpdates: async (currentVersion: string) => {
     if (get().isChecking) return;
+    const epoch = useAuthStore.getState().connectionEpoch;
     const { upgradeConfig } = get();
     const requestKey = createUpdateCheckRequestKey(
       currentVersion,
@@ -273,6 +272,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
         githubToken: upgradeConfig.githubToken.trim() || undefined,
         allowPrerelease: upgradeConfig.allowPrerelease,
       });
+      if (useAuthStore.getState().connectionEpoch !== epoch) return;
       const updateInfo = {
         currentVersion,
         latestVersion: result.latest_version,
@@ -293,6 +293,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
         updateInfo,
       });
     } catch (error) {
+      if (useAuthStore.getState().connectionEpoch !== epoch) return;
       const checkedAt = Date.now();
       set({
         checkError:
@@ -519,3 +520,15 @@ function versionsEqual(left: string, right: string): boolean {
 function normalizeVersion(version: string): string {
   return version.trim().replace(/^v/i, "");
 }
+
+useAuthStore.subscribe((state, previous) => {
+  if (state.connectionEpoch !== previous.connectionEpoch) {
+    useUpdateStore.getState().resetApplyState();
+    useUpdateStore.setState({
+      updateInfo: null,
+      isChecking: false,
+      checkError: null,
+      lastCheckedAt: null,
+    });
+  }
+});
